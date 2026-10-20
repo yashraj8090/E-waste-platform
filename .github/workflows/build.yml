@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,10 +21,11 @@ jobs:
           java-version: '17'
 
       - name: Generate Android project
+        shell: bash
         run: |
           mkdir -p app/src/main/java/com/ecocycle/app
-          mkdir -p app/src/main
-          cat > settings.gradle <<'EOF'
+
+          cat > settings.gradle <<'SETTINGS'
           pluginManagement {
               repositories {
                   google()
@@ -40,33 +42,44 @@ jobs:
           }
           rootProject.name = "EcoCycle"
           include(":app")
-          EOF
-          cat > build.gradle <<'EOF'
+          SETTINGS
+
+          cat > build.gradle <<'ROOT'
           plugins {
               id 'com.android.application' version '8.7.3' apply false
           }
-          EOF
-          cat > gradle.properties <<'EOF'
+          ROOT
+
+          cat > gradle.properties <<'PROPS'
           org.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8
           android.useAndroidX=true
-          EOF
-          cat > app/build.gradle <<'EOF'
+          PROPS
+
+          cat > app/build.gradle <<'APPBUILD'
           plugins {
               id 'com.android.application'
           }
+
           android {
               namespace 'com.ecocycle.app'
               compileSdk 35
+
               defaultConfig {
                   applicationId 'com.ecocycle.app'
                   minSdk 23
                   targetSdk 28
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '2.0'
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
-          EOF
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          APPBUILD
+
+          cat > app/src/main/AndroidManifest.xml <<'MANIFEST'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:theme="@android:style/Theme.Material.Light.NoActionBar"
@@ -82,145 +95,499 @@ jobs:
                   </activity>
               </application>
           </manifest>
-          EOF
-          cat > app/src/main/java/com/ecocycle/app/MainActivity.java <<'EOF'
+          MANIFEST
+
+          cat > app/src/main/java/com/ecocycle/app/MainActivity.java <<'JAVA'
           package com.ecocycle.app;
 
           import android.app.Activity;
           import android.os.Bundle;
           import android.content.SharedPreferences;
+          import android.content.res.ColorStateList;
           import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.graphics.drawable.GradientDrawable;
+          import android.view.Gravity;
+          import android.view.View;
           import android.widget.*;
           import org.json.JSONArray;
           import org.json.JSONObject;
 
           public class MainActivity extends Activity {
-              LinearLayout root;
+              LinearLayout root, outer;
               SharedPreferences prefs;
-              int green = Color.rgb(34,125,78);
+              boolean night;
+              String language;
+              int bg, card, fg, muted, accent, line;
+              final String[] categories = {
+                  "PCBs / Circuit boards", "Cables / Copper wire",
+                  "Batteries", "LCD panels", "CRT monitors",
+                  "Motors / Magnets", "Mixed plastics",
+                  "Phones / Computers", "Other e-waste"
+              };
 
-              public void onCreate(Bundle b) {
-                  super.onCreate(b);
+              @Override
+              public void onCreate(Bundle state) {
+                  super.onCreate(state);
                   prefs = getSharedPreferences("ecocycle", MODE_PRIVATE);
+                  night = prefs.getBoolean("night", true);
+                  language = prefs.getString("language", "English");
                   home();
               }
 
-              TextView label(String s, int size) {
+              void colors() {
+                  if (night) {
+                      bg = Color.rgb(7,31,24);
+                      card = Color.rgb(16,56,40);
+                      fg = Color.rgb(241,255,244);
+                      muted = Color.rgb(174,207,184);
+                      accent = Color.rgb(139,230,164);
+                      line = Color.rgb(42,83,60);
+                  } else {
+                      bg = Color.rgb(242,248,241);
+                      card = Color.WHITE;
+                      fg = Color.rgb(22,55,36);
+                      muted = Color.rgb(91,117,98);
+                      accent = Color.rgb(35,117,70);
+                      line = Color.rgb(218,232,219);
+                  }
+              }
+
+              GradientDrawable shape(int color, int radius) {
+                  GradientDrawable d = new GradientDrawable();
+                  d.setColor(color);
+                  d.setCornerRadius(radius);
+                  return d;
+              }
+
+              TextView text(String value, int size, boolean bold) {
                   TextView t = new TextView(this);
-                  t.setText(s);
+                  t.setText(value);
                   t.setTextSize(size);
-                  t.setTextColor(Color.rgb(35,45,40));
-                  t.setPadding(12,12,12,12);
+                  t.setTextColor(fg);
+                  t.setPadding(4,7,4,7);
+                  if (bold) t.setTypeface(null, Typeface.BOLD);
                   return t;
               }
 
-              void setup(String title) {
-                  ScrollView sc = new ScrollView(this);
-                  root = new LinearLayout(this);
-                  root.setOrientation(1);
-                  root.setPadding(20,20,20,20);
-                  root.setBackgroundColor(Color.rgb(245,250,246));
-                  sc.addView(root);
-                  setContentView(sc);
-                  root.addView(label("EcoCycle ♻",28));
-                  root.addView(label(title,21));
+              void gap(int height) {
+                  View v = new View(this);
+                  root.addView(v, new LinearLayout.LayoutParams(1,height));
               }
 
-              void btn(String s, Runnable r) {
+              LinearLayout column() {
+                  LinearLayout l = new LinearLayout(this);
+                  l.setOrientation(LinearLayout.VERTICAL);
+                  return l;
+              }
+
+              LinearLayout row() {
+                  LinearLayout l = new LinearLayout(this);
+                  l.setOrientation(LinearLayout.HORIZONTAL);
+                  l.setGravity(Gravity.CENTER_VERTICAL);
+                  return l;
+              }
+
+              void cardStart() {
+                  LinearLayout c = column();
+                  c.setPadding(14,10,14,10);
+                  c.setBackground(shape(card,22));
+                  LinearLayout.LayoutParams p =
+                      new LinearLayout.LayoutParams(-1,-2);
+                  p.setMargins(0,5,0,10);
+                  root.addView(c,p);
+                  root = c;
+              }
+
+              void cardEnd(LinearLayout previous) {
+                  root = previous;
+              }
+
+              Button button(String label, Runnable action) {
                   Button b = new Button(this);
-                  b.setText(s);
+                  b.setText(label);
+                  b.setTextSize(14);
                   b.setAllCaps(false);
-                  b.setTextColor(Color.WHITE);
-                  b.setBackgroundTintList(
-                      android.content.res.ColorStateList.valueOf(green));
-                  root.addView(b);
-                  b.setOnClickListener(v -> r.run());
+                  b.setTextColor(night ? bg : Color.WHITE);
+                  b.setBackgroundTintList(ColorStateList.valueOf(accent));
+                  b.setPadding(8,5,8,5);
+                  b.setOnClickListener(v -> action.run());
+                  return b;
               }
 
-              EditText field(String hint) {
+              void addButton(String label, Runnable action) {
+                  Button b = button(label,action);
+                  LinearLayout.LayoutParams p =
+                      new LinearLayout.LayoutParams(-1,-2);
+                  p.setMargins(0,4,0,7);
+                  root.addView(b,p);
+              }
+
+              EditText field(String hint, int inputType) {
                   EditText e = new EditText(this);
+                  e.setSingleLine(true);
+                  e.setTextSize(15);
                   e.setHint(hint);
+                  e.setTextColor(fg);
+                  e.setHintTextColor(muted);
+                  e.setInputType(inputType);
+                  e.setPadding(12,8,12,8);
+                  e.setBackground(shape(card,14));
+                  LinearLayout.LayoutParams p =
+                      new LinearLayout.LayoutParams(-1,-2);
+                  p.setMargins(0,5,0,9);
+                  root.addView(e,p);
                   return e;
               }
 
-              void home() {
-                  setup("E-waste Recycling");
-                  root.addView(label(
-                      "Recycle old electronics responsibly.",18));
-                  root.addView(label(
-                      "Mobile phones\\n\\nLaptops and computers\\n\\n"+
-                      "Batteries\\n\\nChargers and cables",17));
-                  btn("Request a Pickup", () -> form());
-                  btn("My Requests", () -> history());
+              Spinner spinner(String[] options) {
+                  Spinner s = new Spinner(this);
+                  ArrayAdapter<String> a = new ArrayAdapter<>(
+                      this, android.R.layout.simple_spinner_item, options);
+                  a.setDropDownViewResource(
+                      android.R.layout.simple_spinner_dropdown_item);
+                  s.setAdapter(a);
+                  s.setPadding(6,4,6,4);
+                  s.setBackground(shape(card,12));
+                  root.addView(s);
+                  return s;
               }
 
-              void form() {
-                  setup("Pickup Request");
-                  EditText name = field("Your name");
-                  EditText address = field("Pickup address");
-                  EditText qty = field("Quantity");
-                  Spinner types = new Spinner(this);
-                  String[] options = {"Mobile phones","Laptop / Computer",
-                      "Batteries","Cables / Chargers","Other electronics"};
-                  types.setAdapter(new ArrayAdapter<String>(this,
-                      android.R.layout.simple_spinner_dropdown_item, options));
-                  root.addView(name);
-                  root.addView(types);
-                  root.addView(qty);
-                  root.addView(address);
+              void setup(String title, String subtitle) {
+                  colors();
+                  outer = column();
+                  outer.setBackgroundColor(bg);
 
-                  btn("Submit Request", () -> {
-                      if (name.getText().toString().trim().isEmpty()
-                          || address.getText().toString().trim().isEmpty()
-                          || qty.getText().toString().trim().isEmpty()) {
-                          Toast.makeText(this,"Fill in all fields",
+                  ScrollView scroll = new ScrollView(this);
+                  root = column();
+                  root.setPadding(18,12,18,16);
+                  scroll.addView(root);
+
+                  LinearLayout.LayoutParams sp =
+                      new LinearLayout.LayoutParams(-1,0,1);
+                  outer.addView(scroll,sp);
+
+                  LinearLayout header = row();
+                  TextView brand = text("♻ EcoCycle",23,true);
+                  brand.setTextColor(accent);
+                  header.addView(brand,new LinearLayout.LayoutParams(
+                      0,-2,1));
+
+                  Button mode = button(night ? "☀ Day" : "☾ Night",
+                      () -> {
+                          night = !night;
+                          prefs.edit().putBoolean("night",night).apply();
+                          redraw();
+                      });
+                  header.addView(mode);
+                  root.addView(header);
+                  root.addView(text(title,25,true));
+                  root.addView(text(subtitle,14,false));
+
+                  LinearLayout nav = row();
+                  nav.setPadding(3,5,3,5);
+                  nav.setBackgroundColor(card);
+                  String[] names = {"Home","Prices","Recyclers",
+                      "Records","More"};
+                  String[] icons = {"⌂","₹","⌖","▤","☰"};
+                  Runnable[] actions = {
+                      () -> home(), () -> prices(),
+                      () -> recyclers(), () -> records(),
+                      () -> more()
+                  };
+                  for (int i=0;i<names.length;i++) {
+                      final int index = i;
+                      LinearLayout item = column();
+                      item.setGravity(Gravity.CENTER);
+                      TextView icon = text(icons[i],19,true);
+                      icon.setGravity(Gravity.CENTER);
+                      TextView name = text(names[i],10,true);
+                      name.setGravity(Gravity.CENTER);
+                      item.addView(icon);
+                      item.addView(name);
+                      item.setPadding(2,3,2,3);
+                      item.setOnClickListener(v -> actions[index].run());
+                      nav.addView(item,new LinearLayout.LayoutParams(
+                          0,-2,1));
+                  }
+                  outer.addView(nav);
+                  setContentView(outer);
+              }
+
+              void heading(String s) {
+                  root.addView(text(s,18,true));
+              }
+
+              void infoCard(String title, String description,
+                            String action, Runnable click) {
+                  LinearLayout previous = root;
+                  cardStart();
+                  root.addView(text(title,17,true));
+                  root.addView(text(description,14,false));
+                  if (action != null) addButton(action,click);
+                  cardEnd(previous);
+              }
+
+              void redraw() { home(); }
+
+              void home() {
+                  setup("Collect. Earn. Recycle.",
+                      "A simpler bridge to responsible e-waste recycling.");
+                  LinearLayout previous = root;
+                  cardStart();
+                  root.addView(text("NAMASTE  •  " + language.toUpperCase(),
+                      12,true));
+                  root.addView(text("Your scrap has value.",25,true));
+                  root.addView(text(
+                      "Check indicative rates, prepare material lots, " +
+                      "and keep your records in one place.",14,false));
+                  addButton("＋  Add a scrap lot",() -> addLot());
+                  cardEnd(previous);
+
+                  heading("Your workspace");
+                  infoCard("₹  Fair price board",
+                      "Explore sample buying rates by material.",
+                      "View rates",() -> prices());
+                  infoCard("⌖  Recycler directory",
+                      "Browse demonstration recycler listings.",
+                      "Find recyclers",() -> recyclers());
+                  infoCard("▤  Handover & records",
+                      "Review locally saved lots and their status.",
+                      "View records",() -> records());
+                  infoCard("Wallet  Earnings ledger",
+                      "Track the demonstration ledger and dues.",
+                      "View earnings",() -> earnings());
+                  infoCard("♧  Safe recycling",
+                      "Learn safer handling practices.",
+                      "Safety guide",() -> safety());
+                  root.addView(text(
+                      "Offline demo • Information is stored on this phone",
+                      12,false));
+              }
+
+              void addLot() {
+                  setup("Add a scrap lot",
+                      "Enter an approximate weight. You can save offline.");
+                  root.addView(text("Material category",15,true));
+                  Spinner type = spinner(categories);
+                  root.addView(text("Approximate weight (kg)",15,true));
+                  EditText weight = field("e.g. 2.5",
+                      android.text.InputType.TYPE_CLASS_NUMBER |
+                      android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                  root.addView(text("Material condition",15,true));
+                  Spinner condition = spinner(new String[]{
+                      "Mixed / unsorted","Sorted","Damaged","Unknown"});
+                  root.addView(text("Collection location (optional)",15,true));
+                  EditText location = field("Area or locality",
+                      android.text.InputType.TYPE_CLASS_TEXT);
+                  root.addView(text("Photo",15,true));
+                  root.addView(text(
+                      "Photo capture is not connected in this UI-only build.",
+                      13,false));
+
+                  addButton("Save lot on this phone",() -> {
+                      String w = weight.getText().toString().trim();
+                      if (w.isEmpty()) {
+                          Toast.makeText(this,"Enter approximate weight",
                               Toast.LENGTH_SHORT).show();
                           return;
                       }
                       try {
-                          JSONArray a = new JSONArray(
-                              prefs.getString("requests","[]"));
+                          double kg = Double.parseDouble(w);
+                          if (kg <= 0) throw new Exception();
+                          JSONArray lots = new JSONArray(
+                              prefs.getString("lots","[]"));
                           JSONObject o = new JSONObject();
-                          o.put("name",name.getText().toString());
-                          o.put("address",address.getText().toString());
-                          o.put("quantity",qty.getText().toString());
-                          o.put("type",types.getSelectedItem().toString());
-                          o.put("status","Pending");
-                          a.put(o);
-                          prefs.edit().putString("requests",a.toString())
+                          String id = "EC-" + System.currentTimeMillis();
+                          o.put("id",id);
+                          o.put("category",type.getSelectedItem().toString());
+                          o.put("weight",w);
+                          o.put("condition",
+                              condition.getSelectedItem().toString());
+                          o.put("location",location.getText().toString());
+                          o.put("created",System.currentTimeMillis());
+                          o.put("status","Saved locally");
+                          lots.put(o);
+                          prefs.edit().putString("lots",lots.toString())
                               .apply();
-                          history();
+                          Toast.makeText(this,"Lot saved: "+id,
+                              Toast.LENGTH_LONG).show();
+                          records();
                       } catch(Exception ex) {
-                          Toast.makeText(this,"Save failed",
+                          Toast.makeText(this,
+                              "Enter a valid positive weight.",
                               Toast.LENGTH_SHORT).show();
                       }
                   });
-                  btn("Home", () -> home());
+                  addButton("Cancel",() -> home());
               }
 
-              void history() {
-                  setup("My Requests");
-                  try {
-                      JSONArray a = new JSONArray(
-                          prefs.getString("requests","[]"));
-                      if (a.length()==0)
-                          root.addView(label("No requests yet.",16));
-                      for (int i=a.length()-1;i>=0;i--) {
-                          JSONObject o=a.getJSONObject(i);
-                          root.addView(label(
-                              o.optString("type")+
-                              "\\nQuantity: "+o.optString("quantity")+
-                              "\\nAddress: "+o.optString("address")+
-                              "\\nStatus: "+o.optString("status"),16));
-                      }
-                  } catch(Exception ex) {
-                      root.addView(label("Unable to load requests.",16));
+              void prices() {
+                  setup("Fair price board","DEMO SAMPLE • Not live market data");
+                  root.addView(text(
+                      "Illustrative rates only. Actual offers depend on " +
+                      "grade, location, weight and recycler quotation.",
+                      14,false));
+                  String[][] data = {
+                      {"Copper-rich cables","₹180–350 / kg"},
+                      {"Mixed circuit boards","₹80–250 / kg"},
+                      {"Aluminium scrap","₹70–150 / kg"},
+                      {"Computer scrap","₹20–100 / kg"},
+                      {"Mixed plastics","₹5–25 / kg"},
+                      {"Motors / assemblies","₹25–100 / kg"},
+                      {"Batteries","Rate varies by type"}
+                  };
+                  for (String[] d:data) {
+                      infoCard(d[0],d[1]+"\nIllustrative example only.",
+                          null,() -> {});
                   }
-                  btn("Home", () -> home());
-                  btn("New Pickup", () -> form());
+                  root.addView(text(
+                      "Price history and spoken rates are planned features.",
+                      13,false));
+              }
+
+              void recyclers() {
+                  setup("Recycler directory",
+                      "DEMO LISTINGS • Authorization not verified");
+                  root.addView(text(
+                      "These sample entries are placeholders, not real " +
+                      "recycler recommendations.",14,false));
+                  infoCard("Green Earth Recycling",
+                      "Example listing\nAccepts: cables, PCBs\n" +
+                      "Offer: sample quotation required\n" +
+                      "Status: Demo — not verified",
+                      "Prepare a lot",() -> addLot());
+                  infoCard("Circular Materials Centre",
+                      "Example listing\nAccepts: electronics, motors\n" +
+                      "Pickup: sample availability\n" +
+                      "Status: Demo — not verified",
+                      "Prepare a lot",() -> addLot());
+                  infoCard("Battery Recovery Facility",
+                      "Example listing\nAccepts: selected battery types\n" +
+                      "Contact and authorization: unavailable in demo",
+                      null,() -> {});
+                  root.addView(text(
+                      "Live matching requires a verified recycler dataset " +
+                      "and location information.",13,false));
+              }
+
+              JSONArray getLots() {
+                  try {
+                      return new JSONArray(prefs.getString("lots","[]"));
+                  } catch(Exception e) {
+                      return new JSONArray();
+                  }
+              }
+
+              void records() {
+                  setup("Lots & handover records",
+                      "Local demonstration records on this device.");
+                  JSONArray lots = getLots();
+                  if (lots.length()==0) {
+                      root.addView(text("No saved lots yet.",17,true));
+                      addButton("＋ Add your first lot",() -> addLot());
+                      return;
+                  }
+                  for (int i=lots.length()-1;i>=0;i--) {
+                      JSONObject o = lots.optJSONObject(i);
+                      if (o==null) continue;
+                      infoCard(o.optString("category"),
+                          "Lot ID: "+o.optString("id")+"\n"+
+                          "Weight: "+o.optString("weight")+" kg\n"+
+                          "Condition: "+o.optString("condition")+"\n"+
+                          "Location: "+o.optString("location","")+"\n"+
+                          "Status: "+o.optString("status"),
+                          null,() -> {});
+                  }
+                  root.addView(text(
+                      "A saved lot is not proof of recycler handover. " +
+                      "Recycler confirmation is not connected yet.",13,false));
+                  addButton("＋ Add another lot",() -> addLot());
+              }
+
+              void earnings() {
+                  setup("My earnings","Simple ledger preview");
+                  infoCard("Total paid","₹0.00\nNo confirmed payments recorded.",
+                      null,() -> {});
+                  infoCard("Pending dues","₹0.00\nNo confirmed sales recorded.",
+                      null,() -> {});
+                  infoCard("Payment method",
+                      "Cash or digital payment can be recorded in a future " +
+                      "version. This build does not process payments.",
+                      null,() -> {});
+                  addButton("View saved lots",() -> records());
+              }
+
+              void safety() {
+                  setup("Safe recycling","Protect yourself and others");
+                  infoCard("Do not burn cables",
+                      "Burning insulation can release dangerous smoke. " +
+                      "Keep cables intact and use a suitable formal recycler.",
+                      null,() -> {});
+                  infoCard("Do not use acid at home",
+                      "Acid leaching and informal chemical processing can " +
+                      "cause serious burns and toxic exposure.",
+                      null,() -> {});
+                  infoCard("Handle batteries carefully",
+                      "Do not crush, puncture or short-circuit batteries. " +
+                      "Keep damaged or swollen batteries away from heat and " +
+                      "seek qualified handling advice.",
+                      null,() -> {});
+                  infoCard("CRT screens",
+                      "Older CRT displays contain hazardous components. " +
+                      "Do not break or dismantle them yourself.",
+                      null,() -> {});
+                  root.addView(text(
+                      "Illustrated and audio safety lessons can be added later.",
+                      13,false));
+              }
+
+              void more() {
+                  setup("More","Preferences and useful information");
+                  infoCard("Settings",
+                      "Choose your preferred language and appearance.",
+                      "Open settings",() -> settings());
+                  infoCard("About EcoCycle",
+                      "A concept for connecting informal collectors with " +
+                      "the formal e-waste recycling chain.",
+                      null,() -> {});
+                  infoCard("Offline mode",
+                      "Lots are saved locally on this device. No cloud " +
+                      "synchronization is implemented in this build.",
+                      null,() -> {});
+                  addButton("Safety guide",() -> safety());
+                  addButton("Earnings",() -> earnings());
+              }
+
+              void settings() {
+                  setup("Settings","Personalize the interface");
+                  root.addView(text("Appearance",17,true));
+                  addButton(night ? "Switch to Day Mode ☀" :
+                      "Switch to Night Mode ☾",() -> {
+                          night = !night;
+                          prefs.edit().putBoolean("night",night).apply();
+                          settings();
+                      });
+                  root.addView(text("Preferred language",17,true));
+                  Spinner lang = spinner(new String[]{
+                      "English","Hindi","Marathi"});
+                  if (language.equals("Hindi")) lang.setSelection(1);
+                  else if (language.equals("Marathi")) lang.setSelection(2);
+                  addButton("Save preference",() -> {
+                      language = lang.getSelectedItem().toString();
+                      prefs.edit().putString("language",language).apply();
+                      Toast.makeText(this,
+                          "Preference saved. Full translations are not " +
+                          "included yet.",Toast.LENGTH_LONG).show();
+                      settings();
+                  });
+                  root.addView(text(
+                      "Language selection is saved, but this demo currently " +
+                      "displays most interface text in English.",13,false));
+                  addButton("Back to Home",() -> home());
               }
           }
-          EOF
+          JAVA
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -230,9 +597,14 @@ jobs:
       - name: Build APK
         run: gradle --no-daemon assembleDebug
 
+      - name: Verify APK
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: EcoCycle-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          
+          if-no-files-found: error
