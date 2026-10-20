@@ -1,0 +1,238 @@
+
+name: Build EcoCycle APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Generate Android project
+        run: |
+          mkdir -p app/src/main/java/com/ecocycle/app
+          mkdir -p app/src/main
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "EcoCycle"
+          include(":app")
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.ecocycle.app'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.ecocycle.app'
+                  minSdk 23
+                  targetSdk 28
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="EcoCycle"
+                  android:allowBackup="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/com/ecocycle/app/MainActivity.java <<'EOF'
+          package com.ecocycle.app;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.widget.*;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+
+          public class MainActivity extends Activity {
+              LinearLayout root;
+              SharedPreferences prefs;
+              int green = Color.rgb(34,125,78);
+
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  prefs = getSharedPreferences("ecocycle", MODE_PRIVATE);
+                  home();
+              }
+
+              TextView label(String s, int size) {
+                  TextView t = new TextView(this);
+                  t.setText(s);
+                  t.setTextSize(size);
+                  t.setTextColor(Color.rgb(35,45,40));
+                  t.setPadding(12,12,12,12);
+                  return t;
+              }
+
+              void setup(String title) {
+                  ScrollView sc = new ScrollView(this);
+                  root = new LinearLayout(this);
+                  root.setOrientation(1);
+                  root.setPadding(20,20,20,20);
+                  root.setBackgroundColor(Color.rgb(245,250,246));
+                  sc.addView(root);
+                  setContentView(sc);
+                  root.addView(label("EcoCycle ♻",28));
+                  root.addView(label(title,21));
+              }
+
+              void btn(String s, Runnable r) {
+                  Button b = new Button(this);
+                  b.setText(s);
+                  b.setAllCaps(false);
+                  b.setTextColor(Color.WHITE);
+                  b.setBackgroundTintList(
+                      android.content.res.ColorStateList.valueOf(green));
+                  root.addView(b);
+                  b.setOnClickListener(v -> r.run());
+              }
+
+              EditText field(String hint) {
+                  EditText e = new EditText(this);
+                  e.setHint(hint);
+                  return e;
+              }
+
+              void home() {
+                  setup("E-waste Recycling");
+                  root.addView(label(
+                      "Recycle old electronics responsibly.",18));
+                  root.addView(label(
+                      "Mobile phones\\n\\nLaptops and computers\\n\\n"+
+                      "Batteries\\n\\nChargers and cables",17));
+                  btn("Request a Pickup", () -> form());
+                  btn("My Requests", () -> history());
+              }
+
+              void form() {
+                  setup("Pickup Request");
+                  EditText name = field("Your name");
+                  EditText address = field("Pickup address");
+                  EditText qty = field("Quantity");
+                  Spinner types = new Spinner(this);
+                  String[] options = {"Mobile phones","Laptop / Computer",
+                      "Batteries","Cables / Chargers","Other electronics"};
+                  types.setAdapter(new ArrayAdapter<String>(this,
+                      android.R.layout.simple_spinner_dropdown_item, options));
+                  root.addView(name);
+                  root.addView(types);
+                  root.addView(qty);
+                  root.addView(address);
+
+                  btn("Submit Request", () -> {
+                      if (name.getText().toString().trim().isEmpty()
+                          || address.getText().toString().trim().isEmpty()
+                          || qty.getText().toString().trim().isEmpty()) {
+                          Toast.makeText(this,"Fill in all fields",
+                              Toast.LENGTH_SHORT).show();
+                          return;
+                      }
+                      try {
+                          JSONArray a = new JSONArray(
+                              prefs.getString("requests","[]"));
+                          JSONObject o = new JSONObject();
+                          o.put("name",name.getText().toString());
+                          o.put("address",address.getText().toString());
+                          o.put("quantity",qty.getText().toString());
+                          o.put("type",types.getSelectedItem().toString());
+                          o.put("status","Pending");
+                          a.put(o);
+                          prefs.edit().putString("requests",a.toString())
+                              .apply();
+                          history();
+                      } catch(Exception ex) {
+                          Toast.makeText(this,"Save failed",
+                              Toast.LENGTH_SHORT).show();
+                      }
+                  });
+                  btn("Home", () -> home());
+              }
+
+              void history() {
+                  setup("My Requests");
+                  try {
+                      JSONArray a = new JSONArray(
+                          prefs.getString("requests","[]"));
+                      if (a.length()==0)
+                          root.addView(label("No requests yet.",16));
+                      for (int i=a.length()-1;i>=0;i--) {
+                          JSONObject o=a.getJSONObject(i);
+                          root.addView(label(
+                              o.optString("type")+
+                              "\\nQuantity: "+o.optString("quantity")+
+                              "\\nAddress: "+o.optString("address")+
+                              "\\nStatus: "+o.optString("status"),16));
+                      }
+                  } catch(Exception ex) {
+                      root.addView(label("Unable to load requests.",16));
+                  }
+                  btn("Home", () -> home());
+                  btn("New Pickup", () -> form());
+              }
+          }
+          EOF
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EcoCycle-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
