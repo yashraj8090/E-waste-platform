@@ -131,6 +131,13 @@ jobs:
           import org.json.JSONObject;
 
           public class MainActivity extends Activity {
+          private static final String SUPABASE_URL =
+          "https://nowebfmldrvltktwmzpu.supabase.co";
+
+           private static final String SUPABASE_KEY =
+           "sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu";
+        
+          
               SharedPreferences pref;
               LinearLayout root, body;
               boolean night;
