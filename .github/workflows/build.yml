@@ -548,10 +548,10 @@ jobs:
             connection.setDoOutput(true);
 
             connection.setRequestProperty(
-                "apikey", SUPABASE_KEY
+                "apikey", sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu
             );
             connection.setRequestProperty(
-                "Authorization", "Bearer " + SUPABASE_KEY
+                "Authorization", "Bearer " + sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu
             );
             connection.setRequestProperty(
                 "Content-Type", "application/json"
@@ -559,7 +559,9 @@ jobs:
             connection.setRequestProperty(
                 "Prefer", "return=minimal"
             );
-
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            
             JSONObject record = new JSONObject();
             record.put("id", item.getString("id"));
             record.put("material", item.getString("material"));
