@@ -576,6 +576,30 @@ jobs:
             }
 
             int code = connection.getResponseCode();
+            java.io.InputStream stream =
+            (code >= 200 && code < 400)
+            ? connection.getInputStream()
+           : connection.getErrorStream();
+
+           java.io.ByteArrayOutputStream buffer =
+           new java.io.ByteArrayOutputStream();
+
+           if (stream != null) {
+           byte[] bytes = new byte[1024];
+           int count;
+
+           while ((count = stream.read(bytes)) != -1) {
+            buffer.write(bytes, 0, count);
+           }
+          stream.close();
+           }
+
+          String serverMessage = buffer.toString("UTF-8");
+
+           android.util.Log.e(
+           "SUPABASE_UPLOAD",
+            "HTTP " + code + ": " + serverMessage
+           );
 
             runOnUiThread(() -> {
                 if (code >= 200 && code < 300) {
