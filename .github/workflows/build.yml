@@ -83,6 +83,9 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <uses-permission android:name="android.permission.INTERNET" />
+
+          
               <application
                   android:allowBackup="true"
                   android:label="Kabadi Saathi"
@@ -129,14 +132,17 @@ jobs:
           import android.widget.*;
           import org.json.JSONArray;
           import org.json.JSONObject;
-
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.io.OutputStream;
+          import java.nio.charset.StandardCharsets;
+           
           public class MainActivity extends Activity {
           private static final String SUPABASE_URL =
           "https://nowebfmldrvltktwmzpu.supabase.co";
 
            private static final String SUPABASE_KEY =
            "sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu";
-        
           
               SharedPreferences pref;
               LinearLayout root, body;
@@ -526,6 +532,72 @@ jobs:
                       .show();
               }
 
+             private void uploadLotToSupabase(JSONObject item) {
+             new Thread(() -> {
+             HttpURLConnection connection = null;
+
+                try {
+                URL url = new URL(
+                SUPABASE_URL + "/rest/v1/scrap_lots"
+             );
+
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setDoOutput(true);
+
+            connection.setRequestProperty(
+                "apikey", SUPABASE_KEY
+            );
+            connection.setRequestProperty(
+                "Authorization", "Bearer " + SUPABASE_KEY
+            );
+            connection.setRequestProperty(
+                "Content-Type", "application/json"
+            );
+            connection.setRequestProperty(
+                "Prefer", "return=minimal"
+            );
+
+            JSONObject record = new JSONObject();
+            record.put("id", item.getString("id"));
+            record.put("material", item.getString("material"));
+            record.put("weight", item.getDouble("weight"));
+            record.put("location", item.optString("location", ""));
+            record.put("status", "Pending");
+
+            byte[] payload = record.toString().getBytes(
+                StandardCharsets.UTF_8
+            );
+
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(payload);
+            }
+
+            int code = connection.getResponseCode();
+
+            runOnUiThread(() -> {
+                if (code >= 200 && code < 300) {
+                    toast("Lot saved online successfully");
+                } else {
+                    toast("Online save failed. HTTP " + code);
+                }
+            });
+
+            } catch (Exception e) {
+            runOnUiThread(() ->
+                toast("Online sync failed. Check internet and settings.")
+            );
+            } finally {
+            if (connection != null) {
+                connection.disconnect();
+             }
+            }
+           }).start();
+            }
+
+
               void addLot() {
                   LinearLayout form = col();
                   pad(form, 12);
@@ -581,6 +653,7 @@ jobs:
 
                               pref.edit().putString("lots", lots.toString())
                                   .apply();
+                                  uploadLotToSupabase(item);
                               tab = 2;
                               render();
                               toast(tr("Lot saved", "लॉट सेव हुआ",
