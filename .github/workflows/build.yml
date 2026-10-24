@@ -870,6 +870,10 @@ jobs:
                   } catch (Exception e) {
                       lots = new JSONArray();
                   }
+                  if (!lotsFetchStarted) {
+                  lotsFetchStarted = true;
+                   fetchAndMergeLots();
+                   }
 
                   if (lots.length() == 0) {
                       TextView empty = t(tr(
