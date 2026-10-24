@@ -733,8 +733,129 @@ jobs:
                       body.addView(panel, p);
                   }
               }
+              private void fetchAndMergeLots() {
+              new Thread(() -> {
+              HttpURLConnection connection = null;
+                try {
+                URL url = new URL(
+                SUPABASE_URL
+                + "/rest/v1/scrap_lots"
+                + "?select=id,material,weight,location,status"
+                 );
 
-              void lotsPage() {
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("apikey", SUPABASE_KEY);
+            connection.setRequestProperty("Accept", "application/json");
+
+            int code = connection.getResponseCode();
+
+            java.io.InputStream stream =
+                (code >= 200 && code < 300)
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+
+            java.io.ByteArrayOutputStream buffer =
+                new java.io.ByteArrayOutputStream();
+
+            if (stream != null) {
+                byte[] bytes = new byte[4096];
+                int count;
+
+                while ((count = stream.read(bytes)) != -1) {
+                    buffer.write(bytes, 0, count);
+                }
+                stream.close();
+            }
+
+            String response = buffer.toString("UTF-8");
+
+            if (code < 200 || code >= 300) {
+                throw new Exception(
+                    "Supabase HTTP " + code + ": " + response
+                );
+            }
+
+            JSONArray onlineLots = new JSONArray(response);
+            JSONArray localLots;
+
+            try {
+                localLots = new JSONArray(
+                    pref.getString("lots", "[]")
+                );
+            } catch (Exception ignored) {
+                localLots = new JSONArray();
+            }
+
+            JSONArray merged = new JSONArray();
+            java.util.HashSet<String> ids =
+                new java.util.HashSet<>();
+
+            for (int i = 0; i < onlineLots.length(); i++) {
+                JSONObject item = onlineLots.optJSONObject(i);
+                if (item == null) continue;
+
+                merged.put(item);
+
+                String id = item.optString("id", "");
+                if (!id.isEmpty()) {
+                    ids.add(id);
+                }
+            }
+
+            for (int i = 0; i < localLots.length(); i++) {
+                JSONObject item = localLots.optJSONObject(i);
+                if (item == null) continue;
+
+                String id = item.optString("id", "");
+
+                if (id.isEmpty() || !ids.contains(id)) {
+                    merged.put(item);
+
+                    if (!id.isEmpty()) {
+                        ids.add(id);
+                    }
+                }
+            }
+
+            final JSONArray finalLots = merged;
+            final int onlineCount = onlineLots.length();
+
+            runOnUiThread(() -> {
+                pref.edit()
+                    .putString("lots", finalLots.toString())
+                    .apply();
+
+                if (tab == 2) {
+                    render();
+                }
+
+                toast("Supabase records loaded: " + onlineCount);
+                });
+
+                } catch (Exception e) {
+                android.util.Log.e(
+                "SUPABASE_FETCH",
+                "Failed to fetch scrap lots",
+                e
+               );
+
+               runOnUiThread(() -> {
+                lotsFetchStarted = false;
+                toast("Online sync failed. Check internet and SELECT policy.");
+                 });
+
+                } finally {
+                if (connection != null) {
+                 connection.disconnect();
+                 }
+                 }
+                 }).start();
+                  }
+
+                 void lotsPage() {
                   heading(tr("My scrap lots", "मेरे स्क्रैप लॉट्स",
                       "माझे भंगार लॉट"));
 
