@@ -599,8 +599,8 @@ jobs:
                 if (code >= 200 && code < 300) {
                     toast("Lot saved online successfully");
                 } else {
-                    toast("Online save failed. HTTP " + code);
-                }
+                    toast("HTTP " + code + ": " + serverMessage)
+                };
             });
 
             } catch (Exception e) {
