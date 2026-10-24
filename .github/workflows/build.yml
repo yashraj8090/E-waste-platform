@@ -548,11 +548,8 @@ jobs:
             connection.setDoOutput(true);
 
             connection.setRequestProperty(
-            "apikey", SUPABASE_KEY
-             );
-             connection.setRequestProperty(
-             "Authorization", "Bearer " + SUPABASE_KEY
-             );
+            "apikey", SUPABASE_KEY);
+             
             connection.setRequestProperty(
                 "Content-Type", "application/json"
             );
