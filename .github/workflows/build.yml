@@ -240,13 +240,21 @@ jobs:
               }
 
               LinearLayout panel() {
-                  LinearLayout layout = col();
-                  layout.setBackground(shape(card,
-                      night ? Color.rgb(46, 118, 85)
-                            : Color.rgb(225, 232, 225), 16));
-                  pad(layout, 14);
-                  return layout;
-              }
+              LinearLayout x = col();
+
+             int panelBg = night
+            ? Color.rgb(12, 57, 46)
+            : Color.WHITE;
+
+            int borderColor = night
+            ? Color.rgb(38, 105, 79)
+            : Color.rgb(225, 232, 225);
+
+           x.setBackground(shape(panelBg, borderColor, 18));
+           pad(x, 16);
+
+            return x;
+            }
 
               Button button(String label) {
                   Button button = new Button(this);
@@ -275,11 +283,21 @@ jobs:
               }
 
               void render() {
-                  bg = night ? Color.rgb(3, 39, 32)
-                             : Color.rgb(246, 247, 242);
-                  fg = night ? Color.WHITE : green;
-                  muted = night ? Color.rgb(207, 224, 215)
-                                : Color.rgb(91, 111, 101);
+                  bg = night
+            ? Color.rgb(3, 32, 27)
+            : Color.rgb(246, 248, 244);
+
+            card = night
+            ? Color.rgb(12, 57, 46)
+           : Color.WHITE;
+
+           fg = night
+           ? Color.rgb(245, 250, 246)
+           : Color.rgb(7, 61, 50);
+
+            muted = night
+              ? Color.rgb(190, 211, 201)
+             : Color.rgb(91, 111, 101);
                   card = night ? Color.rgb(12, 65, 51) : Color.WHITE;
 
                   root = col();
