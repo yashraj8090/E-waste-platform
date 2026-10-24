@@ -599,9 +599,13 @@ jobs:
                 if (code >= 200 && code < 300) {
                     toast("Lot saved online successfully");
                 } else {
-                    toast("HTTP " + code + ": " + serverMessage)
-                };
-            });
+             new AlertDialog.Builder(MainActivity.this)
+             .setTitle("Supabase HTTP " + code)
+            .setMessage(serverMessage)
+             .setPositiveButton("OK", null)
+             .show();
+             }
+             });
 
             } catch (Exception e) {
             runOnUiThread(() ->
