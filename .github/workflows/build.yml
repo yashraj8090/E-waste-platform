@@ -153,6 +153,7 @@ jobs:
               final int green = Color.rgb(7, 61, 50);
               final int lime = Color.rgb(47, 235, 89);
               Bitmap cameraPhoto;
+              private boolean lotsFetchStarted = false;
 
               final String[] materials = {
                   "PCB", "Cables", "Battery",
