@@ -547,17 +547,12 @@ jobs:
             connection.setReadTimeout(15000);
             connection.setDoOutput(true);
 
-            connection.setRequestProperty(
-            "apikey", SUPABASE_KEY);
-             
-            connection.setRequestProperty(
-                "Content-Type", "application/json"
-            );
-            connection.setRequestProperty(
-                "Prefer", "return=minimal"
-            );
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
+
+            connection.setRequestProperty("apikey", SUPABASE_KEY);
+            connection.setRequestProperty("Content-Type", "application/json");
+             connection.setRequestProperty("Prefer", "return=minimal");
             
             JSONObject record = new JSONObject();
             record.put("id", item.getString("id"));
