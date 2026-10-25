@@ -70,8 +70,8 @@ jobs:
                   applicationId 'com.ecocycle.app'
                   minSdk 23
                   targetSdk 28
-                  versionCode 4
-                  versionName '4.0'
+                  versionCode 5
+                  versionName '5.0'
               }
 
               compileOptions {
@@ -83,9 +83,8 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-          <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.INTERNET" />
 
-          
               <application
                   android:allowBackup="true"
                   android:label="Kabadi Saathi"
@@ -118,13 +117,19 @@ jobs:
           cat > app/src/main/java/com/ecocycle/app/MainActivity.java <<'EOF'
           package com.ecocycle.app;
 
+          import android.Manifest;
           import android.app.*;
           import android.os.Bundle;
           import android.content.*;
+          import android.content.pm.PackageManager;
           import android.graphics.Bitmap;
+          import android.graphics.BitmapFactory;
           import android.graphics.Color;
           import android.graphics.Typeface;
           import android.graphics.drawable.GradientDrawable;
+          import android.location.Location;
+          import android.location.LocationListener;
+          import android.location.LocationManager;
           import android.net.Uri;
           import android.provider.MediaStore;
           import android.view.Gravity;
@@ -135,70 +140,86 @@ jobs:
           import java.net.HttpURLConnection;
           import java.net.URL;
           import java.io.OutputStream;
+          import java.io.InputStream;
+          import java.io.ByteArrayOutputStream;
+          import java.io.File;
+          import java.io.FileOutputStream;
           import java.nio.charset.StandardCharsets;
-           
-          public class MainActivity extends Activity {
-          private static final String SUPABASE_URL =
-          "https://nowebfmldrvltktwmzpu.supabase.co";
+          import java.text.SimpleDateFormat;
+          import java.util.Date;
+          import java.util.Locale;
+          import java.util.UUID;
 
-           private static final String SUPABASE_KEY =
-           "sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu";
-          
+          public class MainActivity extends Activity {
+              private static final String SUPABASE_URL = "https://nowebfmldrvltktwmzpu.supabase.co";
+              private static final String SUPABASE_KEY = "sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu";
+              private static final int LOCATION_PERMISSION_REQUEST = 901;
+              private static final int PHOTO_REQUEST = 902;
+
               SharedPreferences pref;
               LinearLayout root, body;
               boolean night;
               String language = "hi";
+              String screen = "role";
+              String roleChoice = "collector";
+              String currentRole = "";
+              String userId = "";
+              String accessToken = "";
+              String refreshToken = "";
+              String email = "";
+              String displayName = "";
+              boolean recyclerAuthorized = false;
+              long tokenExpiresAt = 0;
               int tab = 0;
               int bg, fg, muted, card;
               final int green = Color.rgb(7, 61, 50);
               final int lime = Color.rgb(47, 235, 89);
-              Bitmap cameraPhoto;
-              private boolean lotsFetchStarted = false;
-
-              final String[] materials = {
-                  "PCB", "Cables", "Battery",
-                  "Motor", "Plastic", "Mixed scrap"
-              };
-
-              final String[] namesHi = {
-                  "पीसीबी", "केबल", "बैटरी",
-                  "मोटर", "प्लास्टिक", "मिश्रित स्क्रैप"
-              };
-
-              final String[] namesMr = {
-                  "पीसीबी", "केबल", "बॅटरी",
-                  "मोटर", "प्लास्टिक", "मिश्र भंगार"
-              };
-
+              double currentLat = 0;
+              double currentLon = 0;
+              Uri selectedPhoto = null;
+              
+              LocationManager locationManager;
+          
+              final String[] materials = {"PCB", "Cables", "Battery", "Motor", "Plastic", "Mixed scrap"};
+              final String[] namesHi = {"पीसीबी", "केबल", "बैटरी", "मोटर", "प्लास्टिक", "मिश्रित स्क्रैप"};
+              final String[] namesMr = {"पीसीबी", "केबल", "बॅटरी", "मोटर", "प्लास्टिक", "मिश्र भंगार"};
               final String[] rates = {"120", "60", "40", "50", "15", "20"};
               final String[] icons = {"▦", "⌁", "▯", "⚙", "♧", "▣"};
-
-              @Override
-              public void onCreate(Bundle savedInstanceState) {
+          
+              @Override public void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   pref = getSharedPreferences("ecocycle", MODE_PRIVATE);
                   night = pref.getBoolean("night_mode", true);
                   language = pref.getString("language", "hi");
+                  currentRole = pref.getString("role", "");
+                  userId = pref.getString("user_id", "");
+                  accessToken = pref.getString("access_token", "");
+                  refreshToken = pref.getString("refresh_token", "");
+                  email = pref.getString("email", "");
+                  displayName = pref.getString("display_name", "");
+                  recyclerAuthorized = pref.getBoolean("recycler_authorized", false);
+                  tokenExpiresAt = pref.getLong("token_expires_at", 0);
+                  currentLat = Double.longBitsToDouble(pref.getLong("current_lat", Double.doubleToLongBits(0)));
+                  currentLon = Double.longBitsToDouble(pref.getLong("current_lon", Double.doubleToLongBits(0)));
+                  locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+                  screen = userId.isEmpty() || accessToken.isEmpty() ? "role" : "app";
                   render();
               }
-
+          
               String tr(String en, String hi, String mr) {
                   if ("mr".equals(language)) return mr;
                   if ("en".equals(language)) return en;
                   return hi;
               }
-
+          
               String materialName(int i) {
                   if ("en".equals(language)) return materials[i];
                   if ("mr".equals(language)) return namesMr[i];
                   return namesHi[i];
               }
-
-              int d(int value) {
-                  return (int)(value *
-                      getResources().getDisplayMetrics().density + 0.5f);
-              }
-
+          
+              int d(int value) { return (int)(value * getResources().getDisplayMetrics().density + 0.5f); }
+          
               GradientDrawable shape(int color, int stroke, int radius) {
                   GradientDrawable drawable = new GradientDrawable();
                   drawable.setColor(color);
@@ -206,798 +227,600 @@ jobs:
                   if (stroke != 0) drawable.setStroke(d(1), stroke);
                   return drawable;
               }
-
+          
               TextView t(String text, int size, int color, boolean bold) {
                   TextView view = new TextView(this);
-                  view.setText(text);
-                  view.setTextSize(size);
-                  view.setTextColor(color);
+                  view.setText(text); view.setTextSize(size); view.setTextColor(color);
                   if (bold) view.setTypeface(null, Typeface.BOLD);
                   view.setGravity(Gravity.CENTER_VERTICAL);
                   return view;
               }
-
-              LinearLayout col() {
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.VERTICAL);
-                  return layout;
-              }
-
-              LinearLayout row() {
-                  LinearLayout layout = new LinearLayout(this);
-                  layout.setOrientation(LinearLayout.HORIZONTAL);
-                  layout.setGravity(Gravity.CENTER_VERTICAL);
-                  return layout;
-              }
-
-              LinearLayout.LayoutParams lp(int width, int height) {
-                  return new LinearLayout.LayoutParams(
-                      width < 0 ? width : d(width),
-                      height < 0 ? height : d(height));
-              }
-
-              void pad(View view, int amount) {
-                  view.setPadding(d(amount), d(amount), d(amount), d(amount));
-              }
-
+          
+              LinearLayout col() { LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.VERTICAL); return x; }
+              LinearLayout row() { LinearLayout x = new LinearLayout(this); x.setOrientation(LinearLayout.HORIZONTAL); x.setGravity(Gravity.CENTER_VERTICAL); return x; }
+              LinearLayout.LayoutParams lp(int w, int h) { return new LinearLayout.LayoutParams(w < 0 ? w : d(w), h < 0 ? h : d(h)); }
+              void pad(View v, int amount) { v.setPadding(d(amount), d(amount), d(amount), d(amount)); }
+              void gap(int height) { body.addView(new View(this), lp(1, height)); }
+              void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); }
+          
               LinearLayout panel() {
-              LinearLayout x = col();
-
-             int panelBg = night
-            ? Color.rgb(12, 57, 46)
-            : Color.WHITE;
-
-            int borderColor = night
-            ? Color.rgb(38, 105, 79)
-            : Color.rgb(225, 232, 225);
-
-           x.setBackground(shape(panelBg, borderColor, 18));
-           pad(x, 16);
-
-            return x;
-            }
-
+                  LinearLayout x = col();
+                  int panelBg = night ? Color.rgb(12, 57, 46) : Color.WHITE;
+                  int border = night ? Color.rgb(38, 105, 79) : Color.rgb(225, 232, 225);
+                  x.setBackground(shape(panelBg, border, 18)); pad(x, 14); return x;
+              }
+          
               Button button(String label) {
-                  Button button = new Button(this);
-                  button.setText(label);
-                  button.setTextSize(14);
-                  button.setAllCaps(false);
-                  button.setTypeface(null, Typeface.BOLD);
-                  button.setTextColor(green);
-                  button.setBackground(shape(lime, 0, 13));
-                  return button;
+                  Button b = new Button(this); b.setText(label); b.setTextSize(14); b.setAllCaps(false);
+                  b.setTypeface(null, Typeface.BOLD); b.setTextColor(green); b.setBackground(shape(lime, 0, 13)); return b;
               }
-
+          
+              Button secondaryButton(String label) {
+                  Button b = button(label); b.setTextColor(fg); b.setBackground(shape(card, night ? Color.rgb(46,118,85) : Color.rgb(215,225,216), 13)); return b;
+              }
+          
+              EditText edit(String hint, int inputType) {
+                  EditText e = new EditText(this); e.setSingleLine(true); e.setTextSize(15); e.setHint(hint);
+                  e.setInputType(inputType == 0 ? (android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) : inputType); return e;
+              }
+          
               void heading(String label) {
-                  TextView view = t(label, 19, fg, true);
-                  LinearLayout.LayoutParams p = lp(-1, -2);
-                  p.setMargins(0, d(14), 0, d(9));
-                  body.addView(view, p);
+                  TextView v = t(label, 19, fg, true); LinearLayout.LayoutParams p = lp(-1, -2);
+                  p.setMargins(0, d(14), 0, d(9)); body.addView(v, p);
               }
-
-              void gap(int height) {
-                  body.addView(new View(this), lp(1, height));
+          
+              @Override public void onBackPressed() {
+                  if ("app".equals(screen)) { super.onBackPressed(); return; }
+                  if ("login".equals(screen)) { screen = "role"; render(); return; }
+                  super.onBackPressed();
               }
-
-              void toast(String message) {
-                  Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-              }
-
+          
               void render() {
-                  bg = night
-            ? Color.rgb(3, 32, 27)
-            : Color.rgb(246, 248, 244);
-
-            card = night
-            ? Color.rgb(12, 57, 46)
-           : Color.WHITE;
-
-           fg = night
-           ? Color.rgb(245, 250, 246)
-           : Color.rgb(7, 61, 50);
-
-            muted = night
-              ? Color.rgb(190, 211, 201)
-             : Color.rgb(91, 111, 101);
-                  card = night ? Color.rgb(12, 65, 51) : Color.WHITE;
-
-                  root = col();
-                  root.setBackgroundColor(bg);
-                  setContentView(root);
-
-                  LinearLayout header = row();
-                  header.setBackground(shape(green, 0, 16));
-                  pad(header, 12);
-
-                  header.addView(t("❧", 34, lime, true), lp(45, 50));
-
+                  bg = night ? Color.rgb(3,32,27) : Color.rgb(246,248,244);
+                  card = night ? Color.rgb(12,65,51) : Color.WHITE;
+                  fg = night ? Color.rgb(245,250,246) : Color.rgb(7,61,50);
+                  muted = night ? Color.rgb(190,211,201) : Color.rgb(91,111,101);
+                  root = col(); root.setBackgroundColor(bg); setContentView(root);
+          
+                  LinearLayout header = row(); header.setBackground(shape(green, 0, 16)); pad(header, 11);
+                  header.addView(t("♻", 29, lime, true), lp(42, 45));
                   LinearLayout brand = col();
-                  brand.addView(t("कबाड़ी साथी", 21, Color.WHITE, true));
-                  brand.addView(t("Kabadi Saathi", 18, Color.WHITE, true));
-                  header.addView(brand,
-                      new LinearLayout.LayoutParams(0, -2, 1));
-
-                  TextView theme = t(night ? "☼" : "☾", 25, lime, true);
-                  theme.setGravity(Gravity.CENTER);
-                  theme.setOnClickListener(v -> {
-                      night = !night;
-                      pref.edit().putBoolean("night_mode", night).apply();
-                      render();
-                  });
-                  header.addView(theme, lp(42, 45));
-
-                  LinearLayout.LayoutParams hp = lp(-1, -2);
-                  hp.setMargins(d(12), d(10), d(12), d(5));
-                  root.addView(header, hp);
-
-                  ScrollView scroll = new ScrollView(this);
-                  body = col();
-                  body.setPadding(d(14), d(3), d(14), d(14));
-                  scroll.addView(body);
-                  root.addView(scroll,
-                      new LinearLayout.LayoutParams(-1, 0, 1));
-
-                  LinearLayout nav = row();
-                  nav.setBackground(shape(
-                      night ? Color.rgb(5, 57, 45) : Color.WHITE, 0, 18));
-
-                  String[] labels = {
-                      tr("Home", "होम", "होम"),
-                      tr("Rates", "दरें", "दर"),
-                      tr("My Lots", "मेरे लॉट्स", "माझे लॉट"),
-                      tr("Profile", "प्रोफ़ाइल", "प्रोफाइल")
-                  };
-                  String[] navIcons = {"⌂", "₹", "▣", "●"};
-
-                  for (int i = 0; i < 4; i++) {
-                      final int selected = i;
-                      int color = tab == i ? lime :
-                          (night ? Color.LTGRAY : Color.DKGRAY);
-
-                      TextView item = t(
-                          navIcons[i] + "\n" + labels[i], 12, color,
-                          tab == i);
-                      item.setGravity(Gravity.CENTER);
-                      item.setPadding(d(2), d(5), d(2), d(5));
-                      item.setOnClickListener(v -> {
-                          tab = selected;
-                          render();
-                      });
-                      nav.addView(item,
-                          new LinearLayout.LayoutParams(0, d(60), 1));
-                  }
-
-                  LinearLayout.LayoutParams np = lp(-1, -2);
-                  np.setMargins(d(9), d(3), d(9), d(8));
-                  root.addView(nav, np);
-
-                  if (tab == 0) home();
-                  else if (tab == 1) ratesPage();
-                  else if (tab == 2) lotsPage();
-                  else profile();
+                  brand.addView(t("कबाड़ी साथी", 19, Color.WHITE, true));
+                  brand.addView(t("Kabadi Saathi", 16, Color.WHITE, true));
+                  header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
+                  TextView theme = t(night ? "☼" : "☾", 23, lime, true); theme.setGravity(Gravity.CENTER);
+                  theme.setOnClickListener(v -> { night = !night; pref.edit().putBoolean("night_mode", night).apply(); render(); });
+                  header.addView(theme, lp(38, 42));
+                  LinearLayout.LayoutParams hp = lp(-1, -2); hp.setMargins(d(10), d(9), d(10), d(5)); root.addView(header, hp);
+          
+                  ScrollView scroll = new ScrollView(this); body = col(); body.setPadding(d(14), d(4), d(14), d(14)); scroll.addView(body);
+                  root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+          
+                  if ("role".equals(screen)) { roleScreen(); return; }
+                  if ("login".equals(screen)) { loginScreen(); return; }
+                  if ("app".equals(screen)) { appShell(); }
               }
-
-              void home() {
-                  TextView greeting = t(
-                      tr("Namaskar!", "नमस्कार!", "नमस्कार!"),
-                      20, fg, true);
-                  greeting.setGravity(Gravity.CENTER);
-                  body.addView(greeting, lp(-1, 34));
-
-                  TextView subtitle = t(
-                      tr("Sell e-waste safely and easily",
-                          "ई-कचरा सुरक्षित और आसानी से बेचें",
-                          "ई-कचरा सुरक्षितपणे आणि सहज विका"),
-                      13, muted, false);
-                  subtitle.setGravity(Gravity.CENTER);
-                  body.addView(subtitle, lp(-1, 36));
-
-                  LinearLayout earnings = panel();
-                  earnings.addView(t(
-                      tr("Earnings ledger", "कमाई का हिसाब", "कमाईचा हिशोब"),
-                      17, fg, true));
-                  earnings.addView(t(
-                      tr("Total earnings (demo)", "कुल कमाई (डेमो)",
-                          "एकूण कमाई (डेमो)"), 14, muted, false));
-                  earnings.addView(t(
-                      "₹" + pref.getInt("earnings", 1240),
-                      30, night ? lime : green, true));
-                  earnings.addView(t(
-                      tr("Illustrative balance only", "केवल उदाहरण",
-                          "फक्त उदाहरण"), 12, muted, false));
-                  body.addView(earnings, lp(-1, -2));
-
-                  heading(tr("Material rates (₹ / kg)",
-                      "सामग्री के भाव (₹ / किलो)",
-                      "साहित्याचे दर (₹ / किलो)"));
-
-                  for (int r = 0; r < 2; r++) {
-                      LinearLayout prices = row();
-
-                      for (int c = 0; c < 3; c++) {
-                          int i = r * 3 + c;
-                          LinearLayout tile = col();
-                          tile.setGravity(Gravity.CENTER);
-                          tile.setBackground(shape(card,
-                              night ? Color.rgb(46, 118, 85)
-                                    : Color.rgb(225, 232, 225), 13));
-                          pad(tile, 5);
-
-                          TextView icon = t(icons[i], 25, lime, true);
-                          icon.setGravity(Gravity.CENTER);
-                          tile.addView(icon, lp(-1, 32));
-
-                          TextView name = t(materialName(i), 11, fg, true);
-                          name.setGravity(Gravity.CENTER);
-                          tile.addView(name, lp(-1, 34));
-
-                          TextView price = t("₹" + rates[i], 16, fg, true);
-                          price.setGravity(Gravity.CENTER);
-                          tile.addView(price);
-
-                          LinearLayout.LayoutParams p =
-                              new LinearLayout.LayoutParams(0, d(103), 1);
-                          p.setMargins(d(3), d(3), d(3), d(3));
-                          prices.addView(tile, p);
-                      }
-                      body.addView(prices);
-                  }
-
-                  body.addView(t(tr(
-                      "Demo prices only; not live market rates.",
-                      "ये डेमो भाव हैं, लाइव बाजार दरें नहीं।",
-                      "हे डेमो दर आहेत; थेट बाजारभाव नाहीत."),
-                      11, muted, false), lp(-1, 30));
-
-                  Button camera = button(tr(
-                      "📷 Scrap Camera / Gallery",
-                      "📷 स्क्रैप कैमरा / गैलरी",
-                      "📷 भंगार कॅमेरा / गॅलरी"));
-                  camera.setOnClickListener(v -> choosePhoto());
-                  body.addView(camera, lp(-1, 52));
-
-                  Button add = button(tr("＋ Add Scrap Lot",
-                      "＋ स्क्रैप लॉट जोड़ें", "＋ भंगार लॉट जोडा"));
-                  add.setOnClickListener(v -> addLot());
-                  LinearLayout.LayoutParams p = lp(-1, 50);
-                  p.setMargins(0, d(7), 0, 0);
-                  body.addView(add, p);
+          
+              void roleScreen() {
+                  gap(24);
+                  TextView title = t("Welcome to Kabadi Saathi", 23, fg, true); title.setGravity(Gravity.CENTER); body.addView(title, lp(-1, 52));
+                  TextView sub = t("Choose your account type to continue", 14, muted, false); sub.setGravity(Gravity.CENTER); body.addView(sub, lp(-1, 44));
+                  gap(18);
+                  LinearLayout c = panel(); c.addView(t("♻  Collector", 20, fg, true));
+                  c.addView(t("Upload scrap lots, set pickup location and manage incoming recycler orders.", 14, muted, false));
+                  Button cb = button("Continue as Collector"); LinearLayout.LayoutParams cp = lp(-1, 49); cp.setMargins(0, d(12), 0, 0); c.addView(cb, cp);
+                  cb.setOnClickListener(v -> { roleChoice = "collector"; screen = "login"; render(); });
+                  body.addView(c, lp(-1, -2));
+                  gap(14);
+                  LinearLayout r = panel(); r.addView(t("♻  Authorised Recycler", 20, fg, true));
+                  r.addView(t("Discover nearby lots, request orders and record cash payments.", 14, muted, false));
+                  Button rb = button("Continue as Recycler"); LinearLayout.LayoutParams rp = lp(-1, 49); rp.setMargins(0, d(12), 0, 0); r.addView(rb, rp);
+                  rb.setOnClickListener(v -> { roleChoice = "recycler"; screen = "login"; render(); });
+                  body.addView(r, lp(-1, -2));
+                  gap(14);
+                  body.addView(t("Recycler accounts require authorisation before placing orders. This app records cash payments; it does not process online payments.", 12, muted, false), lp(-1, -2));
               }
-
-              void choosePhoto() {
-                  String[] choices = {
-                      tr("Take photo", "फोटो खींचें", "फोटो काढा"),
-                      tr("Choose from gallery",
-                          "गैलरी से चुनें", "गॅलरीमधून निवडा")
-                  };
-
-                  new AlertDialog.Builder(this)
-                      .setTitle(tr("Vernacular AI Camera",
-                          "स्थानीय भाषा AI कैमरा",
-                          "स्थानिक भाषा AI कॅमेरा"))
-                      .setItems(choices, (dialog, which) -> {
-                          try {
-                              Intent intent;
-                              if (which == 0) {
-                                  intent = new Intent(
-                                      MediaStore.ACTION_IMAGE_CAPTURE);
-                                  if (intent.resolveActivity(
-                                      getPackageManager()) != null) {
-                                      startActivityForResult(intent, 73);
-                                  } else {
-                                      toast(tr("No camera app found",
-                                          "कैमरा ऐप नहीं मिला",
-                                          "कॅमेरा अॅप सापडले नाही"));
-                                  }
-                              } else {
-                                  intent = new Intent(
-                                      Intent.ACTION_OPEN_DOCUMENT);
-                                  intent.addCategory(
-                                      Intent.CATEGORY_OPENABLE);
-                                  intent.setType("image/*");
-                                  startActivityForResult(intent, 72);
-                              }
-                          } catch (Exception e) {
-                              toast(tr("Unable to open camera or gallery",
-                                  "कैमरा या गैलरी नहीं खुल सकी",
-                                  "कॅमेरा किंवा गॅलरी उघडता आली नाही"));
+          
+              void loginScreen() {
+                  heading(roleChoice.equals("collector") ? "Collector Login / Registration" : "Recycler Login / Registration");
+                  body.addView(t("Use the same email and password when returning to your account.", 13, muted, false), lp(-1, -2));
+                  gap(8);
+                  EditText name = edit("Full name / business name", 0); body.addView(name, lp(-1, 50));
+                  EditText emailField = edit("Email address", 33); body.addView(emailField, lp(-1, 50));
+                  EditText password = edit("Password (minimum 6 characters)", 129); body.addView(password, lp(-1, 50));
+                  TextView hint = t("New account: enter your name, email and password, then tap Create Account. Existing account: tap Login.", 12, muted, false); body.addView(hint, lp(-1, -2));
+                  gap(12);
+                  Button create = button("Create Account"); body.addView(create, lp(-1, 49));
+                  create.setOnClickListener(v -> authenticate(true, roleChoice, name.getText().toString().trim(), emailField.getText().toString().trim(), password.getText().toString()));
+                  gap(7);
+                  Button login = secondaryButton("Login"); body.addView(login, lp(-1, 49));
+                  login.setOnClickListener(v -> authenticate(false, roleChoice, name.getText().toString().trim(), emailField.getText().toString().trim(), password.getText().toString()));
+                  gap(8);
+                  Button back = secondaryButton("← Choose account type"); body.addView(back, lp(-1, 46)); back.setOnClickListener(v -> { screen = "role"; render(); });
+                  gap(12);
+                  body.addView(t("Recycler registration does not grant recycler authorisation. The recycler account remains pending until an administrator verifies it in Supabase.", 12, muted, false), lp(-1, -2));
+              }
+          
+              void authenticate(boolean register, String chosenRole, String name, String mail, String password) {
+                  if (mail.isEmpty() || !mail.contains("@") || password.length() < 6 || (register && name.isEmpty())) {
+                      toast("Enter a valid email, password (6+ characters)" + (register ? " and name." : ".")); return;
+                  }
+                  toast(register ? "Creating account…" : "Signing in…");
+                  new Thread(() -> {
+                      try {
+                          JSONObject payload = new JSONObject(); payload.put("email", mail); payload.put("password", password);
+                          String path;
+                          if (register) {
+                              path = "/auth/v1/signup";
+                              JSONObject data = new JSONObject(); data.put("role", chosenRole); data.put("display_name", name);
+                              payload.put("data", data);
+                          } else path = "/auth/v1/token?grant_type=password";
+                          String response = httpRequest(path, "POST", payload, false, "return=representation");
+                          JSONObject result = response.isEmpty() ? new JSONObject() : new JSONObject(response);
+                          String token = result.optString("access_token", "");
+                          
+                          JSONObject user = result.optJSONObject("user");
+                          if (user == null && result.has("id")) user = result;
+                          if (token.isEmpty() || user == null) {
+                              runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Account created")
+                                  .setMessage("Supabase may require email confirmation. Confirm your email, then return here and tap Login.")
+                                  .setPositiveButton("OK", (di, w) -> { screen = "login"; render(); }).show());
+                              return;
                           }
-                      })
-                      .setNegativeButton(tr("Cancel", "रद्द करें", "रद्द करा"),
-                          null)
-                      .show();
-              }
-
-              @Override
-              protected void onActivityResult(int requestCode,
-                  int resultCode, Intent data) {
-                  super.onActivityResult(requestCode, resultCode, data);
-                  if (resultCode != RESULT_OK) return;
-
-                  if (requestCode == 72 && data != null &&
-                      data.getData() != null) {
-                      Uri uri = data.getData();
-                      pref.edit().putString("photo", uri.toString()).apply();
-                      showCameraAssistant();
-                  } else if (requestCode == 73 && data != null &&
-                      data.getExtras() != null) {
-                      Object result = data.getExtras().get("data");
-                      if (result instanceof Bitmap) {
-                          cameraPhoto = (Bitmap) result;
-                          showCameraAssistant();
+                          String id = user.optString("id", "");
+                          JSONObject metadata = user.optJSONObject("user_metadata");
+                          String metadataRole = metadata == null ? "" : metadata.optString("role", "");
+                          String metadataName = metadata == null ? "" : metadata.optString("display_name", name);
+                          if (!metadataRole.isEmpty() && !metadataRole.equals(chosenRole)) {
+                              throw new Exception("This account is registered as " + metadataRole + ". Choose the matching login type.");
+                          }
+                          if (id.isEmpty()) throw new Exception("Authentication response did not include a user ID.");
+                          long expiry = System.currentTimeMillis() / 1000L + result.optLong("expires_in", 3600);
+                          accessToken = token; refreshToken = result.optString("refresh_token", ""); tokenExpiresAt = expiry;
+                          userId = id; currentRole = metadataRole.isEmpty() ? chosenRole : metadataRole; email = mail;
+                          if (metadataName != null && !metadataName.isEmpty()) displayName = metadataName;
+                          else if (!name.isEmpty()) displayName = name;
+                          pref.edit().putString("access_token", accessToken).putString("refresh_token", refreshToken)
+                              .putLong("token_expires_at", tokenExpiresAt).putString("user_id", userId)
+                              .putString("role", currentRole).putString("email", email).putString("display_name", displayName).apply();
+                          ensureProfile(register);
+                          runOnUiThread(() -> {
+                              screen = "app"; tab = 0; render();
+                              if ("recycler".equals(currentRole) && !recyclerAuthorized) {
+                                  new AlertDialog.Builder(this).setTitle("Verification pending")
+                                      .setMessage("Your recycler account is created, but authorisation is pending. Nearby lots and order placement unlock after verification.")
+                                      .setPositiveButton("OK", null).show();
+                              } else toast("Welcome to Kabadi Saathi");
+                          });
+                      } catch (Exception e) {
+                          String msg = e.getMessage() == null ? "Authentication failed. Check internet and Supabase settings." : e.getMessage();
+                          runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Login / registration failed").setMessage(msg).setPositiveButton("OK", null).show());
                       }
+                  }).start();
+              }
+          
+              private synchronized void refreshIfNeeded() throws Exception {
+                  long now = System.currentTimeMillis() / 1000L;
+                  if (refreshToken.isEmpty() || tokenExpiresAt == 0 || now < tokenExpiresAt - 60) return;
+                  JSONObject body = new JSONObject(); body.put("refresh_token", refreshToken);
+                  String response = httpRequest("/auth/v1/token?grant_type=refresh_token", "POST", body, false, "return=representation");
+                  JSONObject result = new JSONObject(response);
+                  if (!result.optString("access_token", "").isEmpty()) {
+                      accessToken = result.getString("access_token");
+                      refreshToken = result.optString("refresh_token", refreshToken);
+                      tokenExpiresAt = now + result.optLong("expires_in", 3600);
+                      pref.edit().putString("access_token", accessToken).putString("refresh_token", refreshToken).putLong("token_expires_at", tokenExpiresAt).apply();
                   }
               }
-
-              void showCameraAssistant() {
-                  new AlertDialog.Builder(this)
-                      .setTitle(tr("Camera Assistant",
-                          "कैमरा सहायक", "कॅमेरा सहाय्यक"))
-                      .setMessage(tr(
-                          "Photo captured or selected. Automatic AI " +
-                          "recognition is not connected yet. Choose the " +
-                          "material manually before saving the lot.",
-                          "फोटो लिया या चुना गया। स्वचालित AI पहचान अभी " +
-                          "नहीं जुड़ी है। लॉट सेव करने से पहले सामग्री " +
-                          "स्वयं चुनें।",
-                          "फोटो घेतला किंवा निवडला. स्वयंचलित AI ओळख " +
-                          "अजून जोडलेली नाही. लॉट जतन करण्यापूर्वी " +
-                          "साहित्य स्वतः निवडा."))
-                      .setPositiveButton(tr("Add scrap lot",
-                          "स्क्रैप लॉट जोड़ें", "भंगार लॉट जोडा"),
-                          (dialog, which) -> addLot())
-                      .setNegativeButton(tr("Close", "बंद करें", "बंद करा"),
-                          null)
-                      .show();
+          
+              private void ensureProfile(boolean register) throws Exception {
+                  String raw = httpRequest("/rest/v1/user_profiles?select=id,role,display_name,is_authorized&id=eq." + userId, "GET", null, true, null);
+                  JSONArray rows = new JSONArray(raw);
+                  if (rows.length() > 0) {
+                      JSONObject profile = rows.getJSONObject(0);
+                      String storedRole = profile.optString("role", currentRole);
+                      if (!storedRole.equals(currentRole)) throw new Exception("Account role does not match this login screen.");
+                      displayName = profile.optString("display_name", displayName);
+                      recyclerAuthorized = profile.optBoolean("is_authorized", false);
+                  } else {
+                      JSONObject profile = new JSONObject(); profile.put("id", userId); profile.put("role", currentRole);
+                      profile.put("display_name", displayName); profile.put("is_authorized", "collector".equals(currentRole));
+                      httpRequest("/rest/v1/user_profiles", "POST", profile, true, "return=minimal");
+                      recyclerAuthorized = "collector".equals(currentRole);
+                  }
+                  pref.edit().putString("display_name", displayName).putBoolean("recycler_authorized", recyclerAuthorized).apply();
               }
-
-             private void uploadLotToSupabase(JSONObject item) {
-             new Thread(() -> {
-             HttpURLConnection connection = null;
-
-                try {
-                URL url = new URL(
-                SUPABASE_URL + "/rest/v1/scrap_lots"
-             );
-
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            connection.setDoOutput(true);
-
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-
-            connection.setRequestProperty("apikey", SUPABASE_KEY);
-            connection.setRequestProperty("Content-Type", "application/json");
-             connection.setRequestProperty("Prefer", "return=minimal");
-            
-            JSONObject record = new JSONObject();
-            record.put("id", item.getString("id"));
-            record.put("material", item.getString("material"));
-            record.put("weight", item.getDouble("weight"));
-            record.put("location", item.optString("location", ""));
-            record.put("status", "Pending");
-
-            byte[] payload = record.toString().getBytes(
-                StandardCharsets.UTF_8
-            );
-
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(payload);
-            }
-
-            int code = connection.getResponseCode();
-            java.io.InputStream stream =
-            (code >= 200 && code < 400)
-            ? connection.getInputStream()
-           : connection.getErrorStream();
-
-           java.io.ByteArrayOutputStream buffer =
-           new java.io.ByteArrayOutputStream();
-
-           if (stream != null) {
-           byte[] bytes = new byte[1024];
-           int count;
-
-           while ((count = stream.read(bytes)) != -1) {
-            buffer.write(bytes, 0, count);
-           }
-          stream.close();
-           }
-
-          String serverMessage = buffer.toString("UTF-8");
-
-           android.util.Log.e(
-           "SUPABASE_UPLOAD",
-            "HTTP " + code + ": " + serverMessage
-           );
-
-            runOnUiThread(() -> {
-                if (code >= 200 && code < 300) {
-                    toast("Lot saved online successfully");
-                } else {
-             new AlertDialog.Builder(MainActivity.this)
-             .setTitle("Supabase HTTP " + code)
-            .setMessage(serverMessage)
-             .setPositiveButton("OK", null)
-             .show();
-             }
-             });
-
-            } catch (Exception e) {
-            runOnUiThread(() ->
-                toast("Online sync failed. Check internet and settings.")
-            );
-            } finally {
-            if (connection != null) {
-                connection.disconnect();
-             }
-            }
-           }).start();
-            }
-
-
+          
+              private String httpRequest(String path, String method, JSONObject payload, boolean auth, String prefer) throws Exception {
+                  if (auth) refreshIfNeeded();
+                  HttpURLConnection connection = null;
+                  try {
+                      URL url = new URL(SUPABASE_URL + path);
+                      connection = (HttpURLConnection) url.openConnection();
+                      connection.setRequestMethod(method); connection.setConnectTimeout(20000); connection.setReadTimeout(20000);
+                      connection.setRequestProperty("apikey", SUPABASE_KEY);
+                      connection.setRequestProperty("Accept", "application/json");
+                      if (auth && !accessToken.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+                      if (payload != null) {
+                          connection.setDoOutput(true); connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                          if (prefer != null) connection.setRequestProperty("Prefer", prefer);
+                          byte[] bytes = payload.toString().getBytes(StandardCharsets.UTF_8);
+                          try (OutputStream out = connection.getOutputStream()) { out.write(bytes); }
+                      } else if (prefer != null) connection.setRequestProperty("Prefer", prefer);
+                      int code = connection.getResponseCode();
+                      InputStream stream = (code >= 200 && code < 300) ? connection.getInputStream() : connection.getErrorStream();
+                      ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                      if (stream != null) { byte[] bytes = new byte[4096]; int n; while ((n = stream.read(bytes)) != -1) buffer.write(bytes, 0, n); stream.close(); }
+                      String response = buffer.toString("UTF-8");
+                      if (code < 200 || code >= 300) throw new Exception("Supabase HTTP " + code + ": " + response);
+                      return response;
+                  } finally { if (connection != null) connection.disconnect(); }
+              }
+          
+              void appShell() {
+                  LinearLayout accountLine = row();
+                  accountLine.addView(t(("collector".equals(currentRole) ? "COLLECTOR" : "AUTHORISED RECYCLER") + "  •  " + displayName, 12, muted, true), new LinearLayout.LayoutParams(0, d(34), 1));
+                  body.addView(accountLine, lp(-1, 34));
+                  if ("recycler".equals(currentRole) && !recyclerAuthorized) { verificationPendingPage(); return; }
+                  if ("collector".equals(currentRole)) collectorTabs(); else recyclerTabs();
+                  if ("collector".equals(currentRole)) {
+                      if (tab == 0) collectorHome(); else if (tab == 1) myLotsPage(); else if (tab == 2) ordersPage(); else profilePage();
+                  } else {
+                      if (tab == 0) nearbyLotsPage(); else if (tab == 1) locationPage(); else if (tab == 2) ordersPage(); else profilePage();
+                  }
+              }
+          
+              void collectorTabs() { addBottomNav(new String[]{"Home", "My Lots", "Orders", "Profile"}, new String[]{"⌂", "▣", "⇄", "●"}); }
+              void recyclerTabs() { addBottomNav(new String[]{"Nearby Lots", "Location", "Orders", "Profile"}, new String[]{"⌖", "⌁", "⇄", "●"}); }
+          
+              void addBottomNav(String[] labels, String[] symbols) {
+                  LinearLayout nav = row(); nav.setBackground(shape(night ? Color.rgb(5,57,45) : Color.WHITE, 0, 17));
+                  for (int i=0;i<labels.length;i++) {
+                      final int selected = i; TextView item = t(symbols[i] + "\n" + labels[i], 11, tab == i ? lime : (night ? Color.LTGRAY : Color.DKGRAY), tab == i);
+                      item.setGravity(Gravity.CENTER); item.setPadding(d(1), d(5), d(1), d(5));
+                      item.setOnClickListener(v -> { tab = selected; render(); });
+                      nav.addView(item, new LinearLayout.LayoutParams(0, d(58), 1));
+                  }
+                  LinearLayout.LayoutParams p = lp(-1, -2); p.setMargins(d(8), d(2), d(8), d(7)); root.addView(nav, p);
+              }
+          
+              void verificationPendingPage() {
+                  LinearLayout box = panel(); box.addView(t("Recycler authorisation pending", 20, fg, true));
+                  box.addView(t("Your account is registered. An administrator must verify your recycler status in Supabase before you can view nearby lots or place orders.", 14, muted, false));
+                  body.addView(box, lp(-1, -2)); gap(10);
+                  Button refresh = button("Refresh verification status"); body.addView(refresh, lp(-1, 48));
+                  refresh.setOnClickListener(v -> new Thread(() -> { try { ensureProfile(false); runOnUiThread(this::render); } catch (Exception e) { runOnUiThread(() -> toast("Unable to refresh profile: " + e.getMessage())); } }).start());
+                  Button logout = secondaryButton("Log out"); body.addView(logout, lp(-1, 46)); logout.setOnClickListener(v -> signOut());
+              }
+          
+              void collectorHome() {
+                  heading("Collector Dashboard");
+                  LinearLayout info = panel();
+                  info.addView(t("Namaskar, " + displayName, 20, fg, true));
+                  info.addView(t("Prepare a scrap lot and publish it for authorised recyclers in your area.", 14, muted, false));
+                  body.addView(info, lp(-1, -2)); gap(10);
+                  Button add = button("＋ Create / Upload Scrap Lot"); body.addView(add, lp(-1, 50)); add.setOnClickListener(v -> addLot());
+                  gap(8); Button gps = secondaryButton("◎ Set Current Pickup Location"); body.addView(gps, lp(-1, 48)); gps.setOnClickListener(v -> requestCurrentLocation());
+                  gap(8); Button orders = secondaryButton("View Incoming Orders"); body.addView(orders, lp(-1, 48)); orders.setOnClickListener(v -> { tab = 2; render(); });
+                  heading("Indicative material rates");
+                  for (int i=0;i<materials.length;i++) {
+                      LinearLayout line = row(); line.setBackground(shape(card, night ? Color.rgb(38,105,79) : Color.rgb(225,232,225), 12)); pad(line, 9);
+                      line.addView(t(icons[i] + "  " + materialName(i), 14, fg, true), new LinearLayout.LayoutParams(0, d(42), 1));
+                      line.addView(t("₹" + rates[i] + "/kg", 15, lime, true)); LinearLayout.LayoutParams p = lp(-1, -2); p.setMargins(0,0,0,d(6)); body.addView(line,p);
+                  }
+                  body.addView(t("Reference rates only. Confirm final price with the recycler before accepting an order.", 11, muted, false), lp(-1,-2));
+              }
+          
+              JSONArray localLots() { try { return new JSONArray(pref.getString("lots", "[]")); } catch (Exception e) { return new JSONArray(); } }
+              JSONArray localOrders() { try { return new JSONArray(pref.getString("orders", "[]")); } catch (Exception e) { return new JSONArray(); } }
+              void saveLocalOrders(JSONArray a) { pref.edit().putString("orders", a.toString()).apply(); }
+          
               void addLot() {
-                  LinearLayout form = col();
-                  pad(form, 12);
-
-                  EditText material = new EditText(this);
-                  material.setSingleLine(true);
-                  material.setHint(tr("Material (e.g. PCB)",
-                      "सामग्री (जैसे PCB)", "साहित्य (उदा. PCB)"));
-                  form.addView(material, lp(-1, 50));
-
-                  EditText weight = new EditText(this);
-                  weight.setSingleLine(true);
-                  weight.setInputType(8194);
-                  weight.setHint(tr("Weight in kg", "वजन किलो में",
-                      "वजन किलोमध्ये"));
-                  form.addView(weight, lp(-1, 50));
-
-                  EditText location = new EditText(this);
-                  location.setSingleLine(true);
-                  location.setHint(tr("Location (optional)",
-                      "स्थान (वैकल्पिक)", "ठिकाण (पर्यायी)"));
-                  form.addView(location, lp(-1, 50));
-
-                  new AlertDialog.Builder(this)
-                      .setTitle(tr("New scrap lot", "नया स्क्रैप लॉट",
-                          "नवीन भंगार लॉट"))
-                      .setView(form)
-                      .setNegativeButton(tr("Cancel", "रद्द करें", "रद्द करा"),
-                          null)
-                      .setPositiveButton(tr("Save", "सेव करें", "जतन करा"),
-                          (dialog, which) -> {
+                  LinearLayout form = col(); pad(form, 8);
+                  EditText material = edit("Material (e.g. PCB, Cables)", 0); form.addView(material, lp(-1, 49));
+                  EditText weight = edit("Weight in kg", 8194); form.addView(weight, lp(-1, 49));
+                  EditText price = edit("Expected price per kg (₹)", 8194); form.addView(price, lp(-1, 49));
+                  EditText location = edit("Pickup area / address", 0); form.addView(location, lp(-1, 49));
+                  Button gps = secondaryButton("Use Current GPS Location"); form.addView(gps, lp(-1, 45));
+                  gps.setOnClickListener(v -> requestCurrentLocation(loc -> { location.setText("GPS " + String.format(Locale.US, "%.5f, %.5f", loc.getLatitude(), loc.getLongitude())); }));
+                  Button photo = secondaryButton("Choose Lot Photo (optional)"); form.addView(photo, lp(-1, 45)); photo.setOnClickListener(v -> choosePhoto());
+                  new AlertDialog.Builder(this).setTitle("Create scrap lot").setView(form).setNegativeButton("Cancel", null)
+                      .setPositiveButton("Save & Upload", (di,w) -> {
                           try {
-                              String name = material.getText().toString().trim();
-                              double kg = Double.parseDouble(
-                                  weight.getText().toString().trim());
-
-                              if (name.isEmpty() || kg <= 0) {
-                                  throw new Exception();
-                              }
-
-                              JSONArray lots = new JSONArray(
-                                  pref.getString("lots", "[]"));
-                              JSONObject item = new JSONObject();
-                              item.put("id", "KS-" +
-                                  (System.currentTimeMillis() % 1000000));
-                              item.put("material", name);
-                              item.put("weight", kg);
-                              item.put("location",
-                                  location.getText().toString().trim());
-                              item.put("photo",
-                                  pref.getString("photo", ""));
-                              lots.put(item);
-
-                              pref.edit().putString("lots", lots.toString())
-                                  .apply();
-                                  uploadLotToSupabase(item);
-                              tab = 2;
-                              render();
-                              toast(tr("Lot saved", "लॉट सेव हुआ",
-                                  "लॉट जतन झाला"));
-                          } catch (Exception e) {
-                              toast(tr("Enter material and valid weight",
-                                  "सामग्री और सही वजन दर्ज करें",
-                                  "साहित्य आणि योग्य वजन भरा"));
-                          }
+                              String mat = material.getText().toString().trim(); double kg = Double.parseDouble(weight.getText().toString().trim());
+                              double priceKg = price.getText().toString().trim().isEmpty() ? 0 : Double.parseDouble(price.getText().toString().trim());
+                              String loc = location.getText().toString().trim();
+                              if (mat.isEmpty() || kg <= 0 || priceKg < 0) throw new Exception("Enter material, valid weight and a valid price.");
+                              JSONObject item = new JSONObject(); item.put("id", "KS-" + UUID.randomUUID().toString().substring(0,8).toUpperCase());
+                              item.put("collector_id", userId); item.put("collector_name", displayName); item.put("material", mat); item.put("weight", kg);
+                              item.put("price_per_kg", priceKg); item.put("location", loc); item.put("status", "available");
+                              item.put("latitude", currentLat == 0 ? JSONObject.NULL : currentLat); item.put("longitude", currentLon == 0 ? JSONObject.NULL : currentLon);
+                              item.put("created_at", isoNow()); if (selectedPhoto != null) item.put("photo_uri", selectedPhoto.toString());
+                              JSONArray lots = localLots(); lots.put(item); pref.edit().putString("lots", lots.toString()).apply();
+                              selectedPhoto = null; tab = 1; render(); uploadLotToSupabase(item);
+                              toast("Lot saved on this phone. Online listing will sync if Supabase policies are configured.");
+                              
+                      } catch (Exception e) { toast(e.getMessage() == null ? "Enter valid lot details." : e.getMessage()); }
                       }).show();
               }
-
-              void ratesPage() {
-                  heading(tr("Buying rates", "खरीद दरें", "खरेदी दर"));
-                  body.addView(t(tr(
-                      "Demo prices only; confirm actual rates locally.",
-                      "डेमो भाव हैं; वास्तविक दर की पुष्टि करें।",
-                      "डेमो दर आहेत; प्रत्यक्ष दर तपासा."),
-                      12, muted, false), lp(-1, 34));
-
-                  for (int i = 0; i < materials.length; i++) {
-                      LinearLayout panel = panel();
-                      LinearLayout line = row();
-                      line.addView(t(icons[i], 26, lime, true), lp(44, 42));
-
-                      LinearLayout details = col();
-                      details.addView(t(materialName(i), 16, fg, true));
-                      details.addView(t("₹" + rates[i] + " / kg",
-                          19, fg, true));
-                      line.addView(details,
-                          new LinearLayout.LayoutParams(0, -2, 1));
-                      panel.addView(line);
-
-                      LinearLayout.LayoutParams p = lp(-1, -2);
-                      p.setMargins(0, 0, 0, d(9));
-                      body.addView(panel, p);
-                  }
-              }
-              private void fetchAndMergeLots() {
-              new Thread(() -> {
-              HttpURLConnection connection = null;
-                try {
-                URL url = new URL(
-                SUPABASE_URL
-                + "/rest/v1/scrap_lots"
-                + "?select=id,material,weight,location,status"
-                 );
-
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            connection.setRequestProperty("apikey", SUPABASE_KEY);
-            connection.setRequestProperty("Accept", "application/json");
-
-            int code = connection.getResponseCode();
-
-            java.io.InputStream stream =
-                (code >= 200 && code < 300)
-                ? connection.getInputStream()
-                : connection.getErrorStream();
-
-            java.io.ByteArrayOutputStream buffer =
-                new java.io.ByteArrayOutputStream();
-
-            if (stream != null) {
-                byte[] bytes = new byte[4096];
-                int count;
-
-                while ((count = stream.read(bytes)) != -1) {
-                    buffer.write(bytes, 0, count);
-                }
-                stream.close();
-            }
-
-            String response = buffer.toString("UTF-8");
-
-            if (code < 200 || code >= 300) {
-                throw new Exception(
-                    "Supabase HTTP " + code + ": " + response
-                );
-            }
-
-            JSONArray onlineLots = new JSONArray(response);
-            JSONArray localLots;
-
-            try {
-                localLots = new JSONArray(
-                    pref.getString("lots", "[]")
-                );
-            } catch (Exception ignored) {
-                localLots = new JSONArray();
-            }
-
-            JSONArray merged = new JSONArray();
-            java.util.HashSet<String> ids =
-                new java.util.HashSet<>();
-
-            for (int i = 0; i < onlineLots.length(); i++) {
-                JSONObject item = onlineLots.optJSONObject(i);
-                if (item == null) continue;
-
-                merged.put(item);
-
-                String id = item.optString("id", "");
-                if (!id.isEmpty()) {
-                    ids.add(id);
-                }
-            }
-
-            for (int i = 0; i < localLots.length(); i++) {
-                JSONObject item = localLots.optJSONObject(i);
-                if (item == null) continue;
-
-                String id = item.optString("id", "");
-
-                if (id.isEmpty() || !ids.contains(id)) {
-                    merged.put(item);
-
-                    if (!id.isEmpty()) {
-                        ids.add(id);
-                    }
-                }
-            }
-
-            final JSONArray finalLots = merged;
-            final int onlineCount = onlineLots.length();
-
-            runOnUiThread(() -> {
-                pref.edit()
-                    .putString("lots", finalLots.toString())
-                    .apply();
-
-                if (tab == 2) {
-                    render();
-                }
-
-                toast("Supabase records loaded: " + onlineCount);
-                });
-
-                } catch (Exception e) {
-                android.util.Log.e(
-                "SUPABASE_FETCH",
-                "Failed to fetch scrap lots",
-                e
-               );
-
-               runOnUiThread(() -> {
-                lotsFetchStarted = false;
-                toast("Online sync failed. Check internet and SELECT policy.");
-                 });
-
-                } finally {
-                if (connection != null) {
-                 connection.disconnect();
-                 }
-                 }
-                 }).start();
-                  }
-
-                 void lotsPage() {
-                  heading(tr("My scrap lots", "मेरे स्क्रैप लॉट्स",
-                      "माझे भंगार लॉट"));
-
-                  Button add = button(tr("＋ Add lot", "＋ लॉट जोड़ें",
-                      "＋ लॉट जोडा"));
-                  add.setOnClickListener(v -> addLot());
-                  body.addView(add, lp(-1, 48));
-
-                  JSONArray lots;
-                  try {
-                      lots = new JSONArray(pref.getString("lots", "[]"));
-                  } catch (Exception e) {
-                      lots = new JSONArray();
-                  }
-                  if (!lotsFetchStarted) {
-                  lotsFetchStarted = true;
-                   fetchAndMergeLots();
-                   }
-
-                  if (lots.length() == 0) {
-                      TextView empty = t(tr(
-                          "No lots yet. Add one above.",
-                          "अभी कोई लॉट नहीं है। ऊपर से जोड़ें।",
-                          "अद्याप लॉट नाही. वरून जोडा."),
-                          15, muted, false);
-                      empty.setGravity(Gravity.CENTER);
-                      body.addView(empty, lp(-1, 100));
-                  }
-
-                  for (int i = lots.length() - 1; i >= 0; i--) {
-                      JSONObject item = lots.optJSONObject(i);
-                      if (item == null) continue;
-
-                      LinearLayout panel = panel();
-                      panel.addView(t(item.optString("material"),
-                          17, fg, true));
-                      panel.addView(t("ID: " + item.optString("id"),
-                          12, muted, false));
-                      panel.addView(t(tr("Weight: ", "वजन: ", "वजन: ") +
-                          item.optDouble("weight") + " kg", 14, fg, true));
-
-                      if (!item.optString("location").isEmpty()) {
-                          panel.addView(t(tr("Location: ", "स्थान: ",
-                              "ठिकाण: ") + item.optString("location"),
-                              13, fg, false));
+          
+              void uploadLotToSupabase(JSONObject item) {
+                  new Thread(() -> { try {
+                      JSONObject record = new JSONObject();
+                      String photoUri = item.optString("photo_uri", "");
+                      if (!photoUri.isEmpty()) {
+                          try {
+                              String photoUrl = uploadLotPhoto(Uri.parse(photoUri), item.optString("id"));
+                              if (!photoUrl.isEmpty()) {
+                                  record.put("photo_url", photoUrl); item.put("photo_url", photoUrl);
+                                  JSONArray saved = localLots();
+                                  for (int i=0;i<saved.length();i++) { JSONObject savedItem=saved.optJSONObject(i); if(savedItem!=null && savedItem.optString("id").equals(item.optString("id"))) { saved.put(i,item); break; } }
+                                  pref.edit().putString("lots", saved.toString()).apply();
+                              }
+                          } catch (Exception photoError) {
+                              android.util.Log.e("LOT_PHOTO_UPLOAD", "Photo upload failed", photoError);
+                          }
                       }
-
-                      panel.addView(t(tr("Status: Pending",
-                          "स्थिति: लंबित", "स्थिती: प्रलंबित"),
-                          13, fg, true));
-
-                      LinearLayout.LayoutParams p = lp(-1, -2);
-                      p.setMargins(0, d(10), 0, 0);
-                      body.addView(panel, p);
+                      String[] keys = {"id","collector_id","collector_name","material","weight","price_per_kg","location","status","latitude","longitude","created_at","photo_url"};
+                      for (String key : keys) if (item.has(key)) record.put(key, item.get(key));
+                      httpRequest("/rest/v1/scrap_lots", "POST", record, true, "return=minimal");
+                      runOnUiThread(() -> toast("Lot uploaded to the shared marketplace."));
+                  } catch (Exception e) { runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Lot saved locally; sync failed").setMessage(e.getMessage()).setPositiveButton("OK",null).show()); } }).start();
+              }
+          
+              String uploadLotPhoto(Uri photoUri, String lotId) throws Exception {
+                  BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                  try (InputStream in = getContentResolver().openInputStream(photoUri)) { BitmapFactory.decodeStream(in, null, bounds); }
+                  if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new Exception("Selected photo is not a supported image");
+                  BitmapFactory.Options opts = new BitmapFactory.Options(); opts.inSampleSize = 1;
+                  while (bounds.outWidth / opts.inSampleSize > 1600 || bounds.outHeight / opts.inSampleSize > 1600) opts.inSampleSize *= 2;
+                  Bitmap bitmap;
+                  try (InputStream in = getContentResolver().openInputStream(photoUri)) { bitmap = BitmapFactory.decodeStream(in, null, opts); }
+                  if (bitmap == null) throw new Exception("Cannot decode selected photo");
+                  ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                  boolean compressed = bitmap.compress(Bitmap.CompressFormat.JPEG, 82, buffer); bitmap.recycle();
+                  if (!compressed) throw new Exception("Cannot prepare selected photo");
+                  byte[] bytes = buffer.toByteArray();
+                  String objectPath = userId + "/" + lotId + ".jpg";
+                  HttpURLConnection connection = null;
+                  try {
+                      URL url = new URL(SUPABASE_URL + "/storage/v1/object/lot-photos/" + objectPath);
+                      connection = (HttpURLConnection) url.openConnection(); connection.setRequestMethod("POST");
+                      connection.setConnectTimeout(20000); connection.setReadTimeout(20000); connection.setDoOutput(true);
+                      connection.setRequestProperty("apikey", SUPABASE_KEY); connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+                      connection.setRequestProperty("Content-Type", "image/jpeg"); connection.setRequestProperty("x-upsert", "true");
+                      try (OutputStream out = connection.getOutputStream()) { out.write(bytes); }
+                      int code = connection.getResponseCode();
+                      if (code < 200 || code >= 300) {
+                          InputStream err = connection.getErrorStream(); ByteArrayOutputStream eb = new ByteArrayOutputStream();
+                          if (err != null) { byte[] chunk = new byte[1024]; int n; while ((n=err.read(chunk))!=-1) eb.write(chunk,0,n); err.close(); }
+                          throw new Exception("Storage HTTP " + code + ": " + eb.toString("UTF-8"));
+                      }
+                  } finally { if (connection != null) connection.disconnect(); }
+                  return SUPABASE_URL + "/storage/v1/object/public/lot-photos/" + objectPath;
+              }
+          
+              void myLotsPage() {
+                  heading("My Scrap Lots"); Button add = button("＋ Add New Lot"); body.addView(add, lp(-1, 48)); add.setOnClickListener(v -> addLot());
+                  gap(6); Button refresh = secondaryButton("Refresh My Lots from Server"); body.addView(refresh, lp(-1, 44)); refresh.setOnClickListener(v -> fetchMyLots());
+                  JSONArray lots = localLots(); if (lots.length()==0) body.addView(t("No lots yet. Tap Add New Lot to create one.", 14, muted, false), lp(-1, 80));
+                  for (int i=lots.length()-1;i>=0;i--) { JSONObject item = lots.optJSONObject(i); if (item==null) continue; if (!userId.equals(item.optString("collector_id", ""))) continue; body.addView(lotCard(item, false), lotCardParams()); }
+              }
+          
+              LinearLayout.LayoutParams lotCardParams() { LinearLayout.LayoutParams p = lp(-1,-2); p.setMargins(0,d(9),0,0); return p; }
+          
+              LinearLayout lotCard(JSONObject item, boolean marketplace) {
+                  LinearLayout p = panel(); String material = item.optString("material", "Scrap lot");
+                  p.addView(t(material, 17, fg, true)); p.addView(t("Lot ID: " + item.optString("id"), 11, muted, false));
+                  p.addView(t("Weight: " + item.optDouble("weight",0) + " kg", 14, fg, true));
+                  double rate = item.optDouble("price_per_kg",0); double total = rate * item.optDouble("weight",0);
+                  p.addView(t(rate > 0 ? "Expected: ₹" + money(total) + " (₹" + money(rate) + "/kg)" : "Price to be confirmed", 14, lime, true));
+                  if (!item.optString("location","").isEmpty()) p.addView(t("Pickup area: " + item.optString("location"), 13, muted, false));
+                  p.addView(t("Status: " + item.optString("status","available"), 12, muted, false));
+                  String photoUrl = item.optString("photo_url", "");
+                  if (!photoUrl.isEmpty()) {
+                      Button viewPhoto = secondaryButton("View Lot Photo"); LinearLayout.LayoutParams vp = lp(-1, 42); vp.setMargins(0,d(6),0,0); p.addView(viewPhoto,vp);
+                      viewPhoto.setOnClickListener(v -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(photoUrl))); } catch(Exception e) { toast("Unable to open lot photo."); } });
                   }
+                  if (marketplace) {
+                      String collector = item.optString("collector_name", "Collector"); p.addView(t("Collector: " + collector + " • " + shortId(item.optString("collector_id")), 12, muted, false));
+                      if (item.has("latitude") && !item.isNull("latitude") && currentLat != 0) {
+                          double dist = distanceKm(currentLat,currentLon,item.optDouble("latitude"),item.optDouble("longitude"));
+                          p.addView(t(String.format(Locale.getDefault(), "Approx. %.1f km away", dist), 12, muted, false));
+                      }
+                      Button order = button("Place Order Request"); LinearLayout.LayoutParams op = lp(-1,45); op.setMargins(0,d(9),0,0); p.addView(order,op);
+                      order.setOnClickListener(v -> placeOrder(item));
+                      Button map = secondaryButton("Open Pickup Location"); LinearLayout.LayoutParams mp=lp(-1,42); mp.setMargins(0,d(5),0,0); p.addView(map,mp);
+                      map.setOnClickListener(v -> openMap(item.optDouble("latitude",0),item.optDouble("longitude",0),item.optString("location","")));
+                  }
+                  return p;
               }
-
-              void profile() {
-                  heading(tr("App Settings", "ऐप सेटिंग्स",
-                      "अॅप सेटिंग्ज"));
-
-                  LinearLayout profile = panel();
-                  profile.addView(t("कबाड़ी साथी / Kabadi Saathi",
-                      20, fg, true));
-                  profile.addView(t(tr("Language and appearance",
-                      "भाषा और दिखावट", "भाषा आणि स्वरूप"),
-                      14, muted, false));
-                  body.addView(profile, lp(-1, -2));
-
-                  Button languageButton = button(tr(
-                      "Language: English / Hindi / Marathi",
-                      "भाषा बदलें / हिंदी",
-                      "भाषा बदला / मराठी"));
-                  languageButton.setOnClickListener(v -> chooseLanguage());
-                  LinearLayout.LayoutParams languageParams = lp(-1, 50);
-                  languageParams.setMargins(0, d(9), 0, 0);
-                  body.addView(languageButton, languageParams);
-
-                  Button themeButton = button(tr(
-                      night ? "Switch to day mode" : "Switch to night mode",
-                      night ? "दिन मोड चालू करें" : "रात मोड चालू करें",
-                      night ? "दिवस मोड सुरू करा" : "रात्र मोड सुरू करा"));
-                  themeButton.setOnClickListener(v -> {
-                      night = !night;
-                      pref.edit().putBoolean("night_mode", night).apply();
-                      render();
-                  });
-                  LinearLayout.LayoutParams themeParams = lp(-1, 50);
-                  themeParams.setMargins(0, d(8), 0, 0);
-                  body.addView(themeButton, themeParams);
-
-                  heading(tr("Safety tips", "सुरक्षा सुझाव",
-                      "सुरक्षा सूचना"));
-                  body.addView(t(tr(
-                      "• Do not cut or burn batteries.\n" +
-                      "• Keep e-waste separated.\n" +
-                      "• Wear gloves and wash your hands.",
-                      "• बैटरी को काटें या जलाएँ नहीं।\n" +
-                      "• ई-कचरे को अलग रखें।\n" +
-                      "• दस्ताने पहनें और हाथ धोएँ।",
-                      "• बॅटरी कापू किंवा जाळू नका.\n" +
-                      "• ई-कचरा वेगळा ठेवा.\n" +
-                      "• हातमोजे घाला आणि हात धुवा."),
-                      14, muted, false), lp(-1, -2));
-
-                  gap(12);
-                  body.addView(t(tr(
-                      "Prices and earnings are demo data. AI recognition, " +
-                      "live prices, payments and recycler verification " +
-                      "are not connected.",
-                      "भाव और कमाई डेमो डेटा हैं। AI पहचान, लाइव भाव, " +
-                      "भुगतान और रीसाइक्लर सत्यापन अभी जुड़े नहीं हैं।",
-                      "दर आणि कमाई डेमो डेटा आहेत. AI ओळख, थेट दर, " +
-                      "पेमेंट आणि रीसायकलर पडताळणी जोडलेली नाही."),
-                      12, muted, false), lp(-1, -2));
+          
+              void fetchMyLots() {
+                  new Thread(() -> { try {
+                      String raw = httpRequest("/rest/v1/scrap_lots?select=id,collector_id,collector_name,material,weight,price_per_kg,location,status,latitude,longitude,created_at,photo_url&collector_id=eq." + userId + "&order=created_at.desc", "GET", null, true, null);
+                      JSONArray remote = new JSONArray(raw); JSONArray merged = new JSONArray(); java.util.HashSet<String> seen = new java.util.HashSet<>();
+                      for (int i=0;i<remote.length();i++) { JSONObject o=remote.optJSONObject(i); if(o!=null){merged.put(o);seen.add(o.optString("id"));} }
+                      JSONArray local = localLots(); for(int i=0;i<local.length();i++){JSONObject o=local.optJSONObject(i);if(o!=null && !seen.contains(o.optString("id"))) merged.put(o);}
+                      pref.edit().putString("lots",merged.toString()).apply(); runOnUiThread(() -> { if(tab==1) render(); toast("Loaded " + remote.length() + " lots."); });
+                  } catch(Exception e) { runOnUiThread(() -> toast("Could not load lots: " + e.getMessage())); } }).start();
               }
-
+              
+              void fetchOrders() {
+                  new Thread(() -> { try {
+                      String filter = "collector".equals(currentRole) ? "collector_id=eq."+userId : "recycler_id=eq."+userId;
+                      String raw=httpRequest("/rest/v1/scrap_orders?select=*&"+filter+"&order=created_at.desc","GET",null,true,null);
+                      JSONArray online=new JSONArray(raw);pref.edit().putString("orders",online.toString()).apply();
+                      runOnUiThread(()->{if("app".equals(screen)&&tab==2)render();toast("Loaded "+online.length()+" orders.");});
+                  }catch(Exception e){runOnUiThread(()->toast("Could not load orders: "+e.getMessage()));} }).start();
+              }
+          
+              void updateOrderStatus(JSONObject order,String status) {
+                  new Thread(() -> { try {
+                      JSONObject update=new JSONObject();update.put("p_order_id",order.optString("id"));update.put("p_decision",status);
+                      String result=httpRequest("/rest/v1/rpc/collector_decide_order","POST",update,true,"return=representation");
+                      if(result==null||result.trim().isEmpty())throw new Exception("No order updated. Check your account role and Supabase RLS policies.");
+                      fetchOrders(); runOnUiThread(()->toast(status.equals("accepted")?"Order accepted.":"Order rejected."));
+                  }catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Could not update order").setMessage(e.getMessage()).setPositiveButton("OK",null).show());} }).start();
+              }
+          
+              void confirmCashPayment(JSONObject order) {
+                  new AlertDialog.Builder(this).setTitle("Confirm cash payment").setMessage("Confirm only after cash has actually been handed over.\n\nAmount: ₹"+money(order.optDouble("amount",0))+"\nRecycler: "+displayName+"\nCollector: "+order.optString("collector_name","Collector"))
+                      .setNegativeButton("Cancel",null).setPositiveButton("Cash Given — Generate Receipt",(di,w)->markCashPaid(order)).show();
+              }
+          
+              void markCashPaid(JSONObject order) {
+                  String receiptNo="KS-CASH-"+new SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(new Date())+"-"+(int)(Math.random()*900+100);
+                  String paidAt=isoNow();
+                  new Thread(() -> { try {
+                      JSONObject update=new JSONObject();update.put("p_order_id",order.optString("id"));update.put("p_receipt_number",receiptNo);update.put("p_paid_at",paidAt);
+                      String raw=httpRequest("/rest/v1/rpc/recycler_mark_cash_paid","POST",update,true,"return=representation");
+                      JSONObject paid=new JSONObject(raw);if(paid.optString("receipt_number","").isEmpty())throw new Exception("No receipt number was returned.");saveReceiptLocal(paid);
+                      runOnUiThread(()->{showReceipt(paid);if(tab==2)fetchOrders();});
+                  }catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Receipt not generated").setMessage(e.getMessage()).setPositiveButton("OK",null).show());} }).start();
+              }
+          
+              void saveReceiptLocal(JSONObject order) {
+                  try { JSONArray rs=new JSONArray(pref.getString("receipts","[]")); String id=order.optString("receipt_number"); boolean exists=false;
+                      for(int i=0;i<rs.length();i++){JSONObject r=rs.optJSONObject(i);if(r!=null&&r.optString("receipt_number").equals(id))exists=true;}
+                      if(!exists)rs.put(order);pref.edit().putString("receipts",rs.toString()).apply();
+                  }catch(Exception ignored){}
+              }
+          
+              void showReceipt(JSONObject o) {
+                  String paidAt=o.optString("paid_at",isoNow());
+                  String formatted=paidAt;
+                  try {
+                      Date parsed = null;
+                      String[] patterns = {"yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"};
+                      for (String pattern : patterns) { try { SimpleDateFormat parser=new SimpleDateFormat(pattern,Locale.US); parser.setTimeZone(java.util.TimeZone.getTimeZone("UTC")); parsed=parser.parse(paidAt); if(parsed!=null) break; } catch(Exception ignored) {} }
+                      if(parsed!=null) formatted=new SimpleDateFormat("dd MMM yyyy, hh:mm a",Locale.getDefault()).format(parsed);
+                  } catch(Exception ignored){}
+                  String receipt="KABADI SAATHI — CASH PAYMENT RECEIPT\n\nReceipt No: "+o.optString("receipt_number","Not available")+
+                      "\nOrder ID: "+o.optString("id")+"\n\nCollector: "+o.optString("collector_name","—")+
+                      "\nCollector ID: "+o.optString("collector_id","—")+"\nRecycler: "+o.optString("recycler_name","—")+
+                      "\nRecycler ID: "+o.optString("recycler_id","—")+"\n\nMaterial: "+o.optString("material","—")+
+                      "\nWeight: "+o.optDouble("weight",0)+" kg\nCash amount: ₹"+money(o.optDouble("amount",0))+
+                      "\nPayment status: CASH PAID\nDate & time: "+formatted+
+                      "\n\nThis receipt records that the recycler marked the cash payment as complete. It is not a bank/payment-gateway confirmation.";
+                  new AlertDialog.Builder(this).setTitle("Cash Payment Receipt").setMessage(receipt)
+                      .setPositiveButton("Share Receipt",(di,w)->{Intent share=new Intent(Intent.ACTION_SEND);share.setType("text/plain");share.putExtra(Intent.EXTRA_SUBJECT,"Kabadi Saathi Cash Receipt "+o.optString("receipt_number"));share.putExtra(Intent.EXTRA_TEXT,receipt);startActivity(Intent.createChooser(share,"Share receipt"));})
+                      .setNegativeButton("Close",null).show();
+              }
+          
+              void locationPage() {
+                  heading("Location & Pickup Map");
+                  LinearLayout info=panel(); info.addView(t("Saved device location",17,fg,true));
+                  if(currentLat==0 && currentLon==0) info.addView(t("No GPS location saved yet.",14,muted,false));
+                  else {info.addView(t(String.format(Locale.US,"Latitude: %.6f",currentLat),14,fg,false));info.addView(t(String.format(Locale.US,"Longitude: %.6f",currentLon),14,fg,false));}
+                  body.addView(info,lp(-1,-2)); gap(10);
+                  Button locate=button("◎ Get Current GPS Location");body.addView(locate,lp(-1,49));locate.setOnClickListener(v->requestCurrentLocation());
+                  gap(8);Button map=secondaryButton("Open Location in Maps");body.addView(map,lp(-1,47));map.setOnClickListener(v->{if(currentLat==0&&currentLon==0)toast("Get your GPS location first.");else openMap(currentLat,currentLon,"My current location");});
+                  gap(12);body.addView(t("Location is used to sort nearby available lots and open map directions. Keep GPS enabled and grant location permission when prompted.",13,muted,false),lp(-1,-2));
+              }
+          
+              interface LocationCallback { void onLocation(Location location); }
+              LocationCallback pendingLocationCallback;
+              void requestCurrentLocation() { requestCurrentLocation(null); }
+              void requestCurrentLocation(LocationCallback callback) {
+                  pendingLocationCallback=callback;
+                  if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED) {
+                      requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},LOCATION_PERMISSION_REQUEST);return;
+                  }
+                  try {
+                      Location best=null;
+                      if(locationManager!=null) {
+                          if(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) best=locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                          if(locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) { Location n=locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); if(n!=null&&(best==null||n.getTime()>best.getTime()))best=n; }
+                      }
+                      if(best!=null) { acceptLocation(best); return; }
+                      if(locationManager==null) throw new Exception("Location service unavailable.");
+                      LocationListener listener=new LocationListener(){@Override public void onLocationChanged(Location loc){try{locationManager.removeUpdates(this);}catch(Exception ignored){} acceptLocation(loc);}
+                          @Override public void onProviderEnabled(String p){} @Override public void onProviderDisabled(String p){} @Override public void onStatusChanged(String p,int s,android.os.Bundle b){} };
+                      boolean requested=false;
+                      if(locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)){locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,0,0,listener);requested=true;}
+                      if(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)){locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,0,0,listener);requested=true;}
+                      if(!requested) throw new Exception("GPS is disabled. Enable Location in phone settings.");
+                      toast("Waiting for current GPS location…");
+                  }catch(SecurityException e){toast("Please allow location permission.");}catch(Exception e){toast(e.getMessage()==null?"Could not read GPS location.":e.getMessage());}
+              }
+          
+              @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults) {
+                  super.onRequestPermissionsResult(requestCode,permissions,grantResults);
+                  if(requestCode==LOCATION_PERMISSION_REQUEST){boolean ok=false;for(int result:grantResults)if(result==PackageManager.PERMISSION_GRANTED)ok=true;
+                      if(ok)requestCurrentLocation(pendingLocationCallback);else toast("Location permission was not granted.");}
+              }
+          
+              void acceptLocation(Location loc) {
+                  currentLat=loc.getLatitude();currentLon=loc.getLongitude();
+                  pref.edit().putLong("current_lat",Double.doubleToLongBits(currentLat)).putLong("current_lon",Double.doubleToLongBits(currentLon)).apply();
+                  runOnUiThread(()->{toast("Current location saved.");if(pendingLocationCallback!=null){LocationCallback cb=pendingLocationCallback;pendingLocationCallback=null;cb.onLocation(loc);}else if("app".equals(screen)&&"recycler".equals(currentRole)&&tab==1)render();});
+              }
+          
+              void openMap(double lat,double lon,String label) {
+                  try { Uri uri; if(lat!=0 || lon!=0) uri=Uri.parse("geo:"+lat+","+lon+"?q="+lat+","+lon+"("+Uri.encode(label.isEmpty()?"Scrap pickup":label)+")");
+                      else uri=Uri.parse("geo:0,0?q="+Uri.encode(label));
+                      Intent intent=new Intent(Intent.ACTION_VIEW,uri);startActivity(intent);
+                  }catch(Exception e){toast("No map application found.");}
+              }
+              
+              void profilePage() {
+                  heading("Account & Settings");LinearLayout p=panel();p.addView(t(displayName,18,fg,true));p.addView(t(email,13,muted,false));p.addView(t("Account role: "+currentRole,13,muted,false));p.addView(t("Account ID: "+userId,11,muted,false));body.addView(p,lp(-1,-2));
+                  gap(10);Button lang=secondaryButton("Change Language: Hindi / English / Marathi");body.addView(lang,lp(-1,46));lang.setOnClickListener(v->chooseLanguage());
+                  gap(7);Button theme=secondaryButton(night?"Switch to Day Mode":"Switch to Night Mode");body.addView(theme,lp(-1,46));theme.setOnClickListener(v->{night=!night;pref.edit().putBoolean("night_mode",night).apply();render();});
+                  gap(7);Button logout=button("Log Out");body.addView(logout,lp(-1,46));logout.setOnClickListener(v->signOut());
+                  gap(12);body.addView(t("Cash payment receipts record the recycler's confirmation. The app does not transfer or verify money electronically.",12,muted,false),lp(-1,-2));
+              }
+          
               void chooseLanguage() {
-                  String[] choices = {
-                      "हिंदी (Hindi)",
-                      "मराठी (Marathi)",
-                      "English"
-                  };
-
-                  int selected = "hi".equals(language) ? 0 :
-                      "mr".equals(language) ? 1 : 2;
-
-                  new AlertDialog.Builder(this)
-                      .setTitle(tr("Choose app language",
-                          "ऐप की भाषा चुनें", "अॅपची भाषा निवडा"))
-                      .setSingleChoiceItems(choices, selected,
-                          (dialog, which) -> {
-                              language = which == 0 ? "hi" :
-                                  which == 1 ? "mr" : "en";
-                              pref.edit().putString("language", language)
-                                  .apply();
-                              dialog.dismiss();
-                              render();
-                          })
-                      .setNegativeButton(tr("Cancel", "रद्द करें",
-                          "रद्द करा"), null)
-                      .show();
+                  String[] choices={"हिंदी (Hindi)","English","मराठी (Marathi)"};int selected="hi".equals(language)?0:"en".equals(language)?1:2;
+                  new AlertDialog.Builder(this).setTitle("Choose language").setSingleChoiceItems(choices,selected,(di,which)->{language=which==0?"hi":which==1?"en":"mr";pref.edit().putString("language",language).apply();di.dismiss();render();}).setNegativeButton("Cancel",null).show();
+              }
+          
+              void signOut() {
+                  pref.edit().remove("access_token").remove("refresh_token").remove("token_expires_at").remove("user_id").remove("role").remove("email").remove("display_name").remove("recycler_authorized").apply();
+                  accessToken="";refreshToken="";userId="";currentRole="";email="";displayName="";recyclerAuthorized=false;screen="role";tab=0;render();
+              }
+          
+              JSONArray sortNearby(JSONArray input) {
+                  java.util.ArrayList<JSONObject> list = new java.util.ArrayList<>();
+                  for (int i=0;i<input.length();i++) { JSONObject item=input.optJSONObject(i); if(item!=null) list.add(item); }
+                  if (currentLat != 0 || currentLon != 0) {
+                      java.util.Collections.sort(list, (a,b) -> Double.compare(distanceForSort(a), distanceForSort(b)));
+                  }
+                  JSONArray out = new JSONArray(); for (JSONObject item : list) out.put(item); return out;
+              }
+              double distanceForSort(JSONObject item) {
+                  if (!item.has("latitude") || item.isNull("latitude") || !item.has("longitude") || item.isNull("longitude")) return Double.MAX_VALUE;
+                  return distanceKm(currentLat,currentLon,item.optDouble("latitude"),item.optDouble("longitude"));
+              }
+              double distanceKm(double lat1,double lon1,double lat2,double lon2) {
+                  double r=6371;double dLat=Math.toRadians(lat2-lat1),dLon=Math.toRadians(lon2-lon1);
+                  double a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(Math.toRadians(lat1))*Math.cos(Math.toRadians(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+                  return r*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+              }
+              String shortId(String id) { if(id==null||id.isEmpty())return "—";return id.length()>12?id.substring(0,8)+"…":id; }
+              String money(double value) { return String.format(Locale.US,"%.2f",value); }
+              String isoNow() { SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.US); f.setTimeZone(java.util.TimeZone.getTimeZone("UTC")); return f.format(new Date()); }
+          
+              void choosePhoto() {
+                  String[] choices={"Take photo","Choose from gallery"};
+                  new AlertDialog.Builder(this).setTitle("Lot photo (optional)").setItems(choices,(di,which)->{
+                      try { Intent intent;if(which==0){intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);if(intent.resolveActivity(getPackageManager())!=null)startActivityForResult(intent,PHOTO_REQUEST);else toast("No camera app found.");}
+                          else {intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("image/*");startActivityForResult(intent,PHOTO_REQUEST+1);} }
+                      catch(Exception e){toast("Unable to open camera or gallery.");}
+                  }).setNegativeButton("Cancel",null).show();
+              }
+          
+              @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+                  super.onActivityResult(requestCode,resultCode,data);if(resultCode!=RESULT_OK||data==null)return;
+                  if(requestCode==PHOTO_REQUEST+1 && data.getData()!=null){selectedPhoto=data.getData();
+                      try { getContentResolver().takePersistableUriPermission(selectedPhoto, data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION)); } catch(Exception ignored) {}
+                      toast("Photo selected.");}
+                  else if(requestCode==PHOTO_REQUEST && data.getExtras()!=null){Object obj=data.getExtras().get("data");if(obj instanceof Bitmap){
+                      try { File f=new File(getCacheDir(),"lot-photo-"+System.currentTimeMillis()+".jpg"); FileOutputStream out=new FileOutputStream(f); ((Bitmap)obj).compress(Bitmap.CompressFormat.JPEG,85,out); out.flush(); out.close(); selectedPhoto=Uri.fromFile(f); toast("Photo captured."); }
+                      catch(Exception e){toast("Photo captured but could not be saved.");}
+                  }}
               }
           }
           EOF
@@ -1016,6 +839,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EcoCycle-APK
+          name: Kabadi-Saathi-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          
+                          
