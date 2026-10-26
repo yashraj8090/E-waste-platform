@@ -991,8 +991,12 @@ jobs:
                  body.addView(create, lp(-1, 50));
 
                 create.setOnClickListener(v -> {
-                toast("Account registration will be connected in the next step.");
-                });
+                String nameValue = name.getText().toString().trim();
+               String emailValue = email.getText().toString().trim();
+               String passwordValue = password.getText().toString();
+
+                authenticate(true, roleChoice, nameValue, emailValue, passwordValue);
+                 });
 
                 gap(8);
 
@@ -1000,7 +1004,10 @@ jobs:
                 body.addView(login, lp(-1, 50));
 
                login.setOnClickListener(v -> {
-               toast("Login will be connected in the next step.");
+               String emailValue = email.getText().toString().trim();
+               String passwordValue = password.getText().toString();
+
+               authenticate(false, roleChoice, "", emailValue, passwordValue);
                });
 
               gap(8);
