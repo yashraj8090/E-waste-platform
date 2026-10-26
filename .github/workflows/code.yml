@@ -924,6 +924,81 @@ jobs:
                       body.addView(panel, p);
                   }
               }
+              
+               void roleScreen() {
+               heading("Welcome to Kabadi Saathi");
+
+               body.addView(t(
+              "Choose your account type to continue",
+               14, muted, false
+               ), lp(-1, -2));
+
+               gap(16);
+
+                Button collector = button("♻ Collector");
+                body.addView(collector, lp(-1, 52));
+
+                 collector.setOnClickListener(v -> {
+                roleChoice = "collector";
+                screen = "login";
+                render();
+                });
+                
+               gap(10);
+
+              Button recycler = button("🏭 Authorised Recycler");
+              body.addView(recycler, lp(-1, 52));
+
+                 recycler.setOnClickListener(v -> {
+                 roleChoice = "recycler";
+                 screen = "login";
+                 render();
+                 });
+                 }
+                        
+                 void loginScreen() {
+                 heading(roleChoice.equals("collector")
+                ? "Collector Login / Registration"
+                : "Authorised Recycler Login / Registration");
+
+                 EditText name = edit("Full name / Business name", 0);
+                 body.addView(name, lp(-1, 50));
+
+                 EditText email = edit("Email address", 33);
+                 body.addView(email, lp(-1, 50));
+
+                  EditText password = edit("Password (minimum 6 characters)", 129);
+                  body.addView(password, lp(-1, 50));
+
+                 gap(10);
+
+                 Button create = button("Create Account");
+                 body.addView(create, lp(-1, 50));
+
+                create.setOnClickListener(v -> {
+                toast("Account registration will be connected in the next step.");
+                });
+
+                gap(8);
+
+                Button login = secondaryButton("Login");
+                body.addView(login, lp(-1, 50));
+
+               login.setOnClickListener(v -> {
+               toast("Login will be connected in the next step.");
+               });
+
+              gap(8);
+
+              Button back = secondaryButton("Back");
+              body.addView(back, lp(-1, 46));
+
+              back.setOnClickListener(v -> {
+              screen = "role";
+              render();
+              });
+              }
+
 
               void profile() {
                   heading(tr("App Settings", "ऐप सेटिंग्स",
