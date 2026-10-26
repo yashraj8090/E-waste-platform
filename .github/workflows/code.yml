@@ -339,6 +339,15 @@ jobs:
                   scroll.addView(body);
                   root.addView(scroll,
                       new LinearLayout.LayoutParams(-1, 0, 1));
+                      if ("role".equals(screen)) {
+                     roleScreen();
+                      return;
+                     }
+
+                   if ("login".equals(screen)) {
+                   loginScreen();
+                   return;
+                    }
 
                   LinearLayout nav = row();
                   nav.setBackground(shape(
