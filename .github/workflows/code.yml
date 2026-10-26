@@ -1,0 +1,1021 @@
+
+name: Build Kabadi Saathi APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Generate Android project
+        shell: bash
+        run: |
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "KabadiSaathi"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          mkdir -p app/src/main/java/com/ecocycle/app
+          mkdir -p app/src/main/res/values
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.ecocycle.app'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.ecocycle.app'
+                  minSdk 23
+                  targetSdk 28
+                  versionCode 4
+                  versionName '4.0'
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <uses-permission android:name="android.permission.INTERNET" />
+
+          
+              <application
+                  android:allowBackup="true"
+                  android:label="Kabadi Saathi"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#2FEB59</item>
+                  <item name="android:statusBarColor">#073D32</item>
+                  <item name="android:navigationBarColor">#073D32</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/ecocycle/app/MainActivity.java <<'EOF'
+          package com.ecocycle.app;
+
+          import android.app.*;
+          import android.os.Bundle;
+          import android.content.*;
+          import android.graphics.Bitmap;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.graphics.drawable.GradientDrawable;
+          import android.net.Uri;
+          import android.provider.MediaStore;
+          import android.view.Gravity;
+          import android.view.View;
+          import android.widget.*;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.net.HttpURLConnection;
+          import java.net.URL;
+          import java.io.OutputStream;
+          import java.nio.charset.StandardCharsets;
+           
+          public class MainActivity extends Activity {
+          private static final String SUPABASE_URL =
+          "https://nowebfmldrvltktwmzpu.supabase.co";
+
+           private static final String SUPABASE_KEY =
+           "sb_publishable_3sNSnv9FClTMG0-4mzNVtA_7KVT3VVu";
+          
+              SharedPreferences pref;
+              LinearLayout root, body;
+              boolean night;
+              String language = "hi";
+              int tab = 0;
+              int bg, fg, muted, card;
+              final int green = Color.rgb(7, 61, 50);
+              final int lime = Color.rgb(47, 235, 89);
+              Bitmap cameraPhoto;
+              private boolean lotsFetchStarted = false;
+
+              final String[] materials = {
+                  "PCB", "Cables", "Battery",
+                  "Motor", "Plastic", "Mixed scrap"
+              };
+
+              final String[] namesHi = {
+                  "पीसीबी", "केबल", "बैटरी",
+                  "मोटर", "प्लास्टिक", "मिश्रित स्क्रैप"
+              };
+
+              final String[] namesMr = {
+                  "पीसीबी", "केबल", "बॅटरी",
+                  "मोटर", "प्लास्टिक", "मिश्र भंगार"
+              };
+
+              final String[] rates = {"120", "60", "40", "50", "15", "20"};
+              final String[] icons = {"▦", "⌁", "▯", "⚙", "♧", "▣"};
+
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  pref = getSharedPreferences("ecocycle", MODE_PRIVATE);
+                  night = pref.getBoolean("night_mode", true);
+                  language = pref.getString("language", "hi");
+                  render();
+              }
+
+              String tr(String en, String hi, String mr) {
+                  if ("mr".equals(language)) return mr;
+                  if ("en".equals(language)) return en;
+                  return hi;
+              }
+
+              String materialName(int i) {
+                  if ("en".equals(language)) return materials[i];
+                  if ("mr".equals(language)) return namesMr[i];
+                  return namesHi[i];
+              }
+
+              int d(int value) {
+                  return (int)(value *
+                      getResources().getDisplayMetrics().density + 0.5f);
+              }
+
+              GradientDrawable shape(int color, int stroke, int radius) {
+                  GradientDrawable drawable = new GradientDrawable();
+                  drawable.setColor(color);
+                  drawable.setCornerRadius(d(radius));
+                  if (stroke != 0) drawable.setStroke(d(1), stroke);
+                  return drawable;
+              }
+
+              TextView t(String text, int size, int color, boolean bold) {
+                  TextView view = new TextView(this);
+                  view.setText(text);
+                  view.setTextSize(size);
+                  view.setTextColor(color);
+                  if (bold) view.setTypeface(null, Typeface.BOLD);
+                  view.setGravity(Gravity.CENTER_VERTICAL);
+                  return view;
+              }
+
+              LinearLayout col() {
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  return layout;
+              }
+
+              LinearLayout row() {
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.HORIZONTAL);
+                  layout.setGravity(Gravity.CENTER_VERTICAL);
+                  return layout;
+              }
+
+              LinearLayout.LayoutParams lp(int width, int height) {
+                  return new LinearLayout.LayoutParams(
+                      width < 0 ? width : d(width),
+                      height < 0 ? height : d(height));
+              }
+
+              void pad(View view, int amount) {
+                  view.setPadding(d(amount), d(amount), d(amount), d(amount));
+              }
+
+              LinearLayout panel() {
+              LinearLayout x = col();
+
+             int panelBg = night
+            ? Color.rgb(12, 57, 46)
+            : Color.WHITE;
+
+            int borderColor = night
+            ? Color.rgb(38, 105, 79)
+            : Color.rgb(225, 232, 225);
+
+           x.setBackground(shape(panelBg, borderColor, 18));
+           pad(x, 16);
+
+            return x;
+            }
+
+              Button button(String label) {
+                  Button button = new Button(this);
+                  button.setText(label);
+                  button.setTextSize(14);
+                  button.setAllCaps(false);
+                  button.setTypeface(null, Typeface.BOLD);
+                  button.setTextColor(green);
+                  button.setBackground(shape(lime, 0, 13));
+                  return button;
+              }
+
+              void heading(String label) {
+                  TextView view = t(label, 19, fg, true);
+                  LinearLayout.LayoutParams p = lp(-1, -2);
+                  p.setMargins(0, d(14), 0, d(9));
+                  body.addView(view, p);
+              }
+
+              void gap(int height) {
+                  body.addView(new View(this), lp(1, height));
+              }
+
+              void toast(String message) {
+                  Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+              }
+
+              void render() {
+                  bg = night
+            ? Color.rgb(3, 32, 27)
+            : Color.rgb(246, 248, 244);
+
+            card = night
+            ? Color.rgb(12, 57, 46)
+           : Color.WHITE;
+
+           fg = night
+           ? Color.rgb(245, 250, 246)
+           : Color.rgb(7, 61, 50);
+
+            muted = night
+              ? Color.rgb(190, 211, 201)
+             : Color.rgb(91, 111, 101);
+                  card = night ? Color.rgb(12, 65, 51) : Color.WHITE;
+
+                  root = col();
+                  root.setBackgroundColor(bg);
+                  setContentView(root);
+
+                  LinearLayout header = row();
+                  header.setBackground(shape(green, 0, 16));
+                  pad(header, 12);
+
+                  header.addView(t("❧", 34, lime, true), lp(45, 50));
+
+                  LinearLayout brand = col();
+                  brand.addView(t("कबाड़ी साथी", 21, Color.WHITE, true));
+                  brand.addView(t("Kabadi Saathi", 18, Color.WHITE, true));
+                  header.addView(brand,
+                      new LinearLayout.LayoutParams(0, -2, 1));
+
+                  TextView theme = t(night ? "☼" : "☾", 25, lime, true);
+                  theme.setGravity(Gravity.CENTER);
+                  theme.setOnClickListener(v -> {
+                      night = !night;
+                      pref.edit().putBoolean("night_mode", night).apply();
+                      render();
+                  });
+                  header.addView(theme, lp(42, 45));
+
+                  LinearLayout.LayoutParams hp = lp(-1, -2);
+                  hp.setMargins(d(12), d(10), d(12), d(5));
+                  root.addView(header, hp);
+
+                  ScrollView scroll = new ScrollView(this);
+                  body = col();
+                  body.setPadding(d(14), d(3), d(14), d(14));
+                  scroll.addView(body);
+                  root.addView(scroll,
+                      new LinearLayout.LayoutParams(-1, 0, 1));
+
+                  LinearLayout nav = row();
+                  nav.setBackground(shape(
+                      night ? Color.rgb(5, 57, 45) : Color.WHITE, 0, 18));
+
+                  String[] labels = {
+                      tr("Home", "होम", "होम"),
+                      tr("Rates", "दरें", "दर"),
+                      tr("My Lots", "मेरे लॉट्स", "माझे लॉट"),
+                      tr("Profile", "प्रोफ़ाइल", "प्रोफाइल")
+                  };
+                  String[] navIcons = {"⌂", "₹", "▣", "●"};
+
+                  for (int i = 0; i < 4; i++) {
+                      final int selected = i;
+                      int color = tab == i ? lime :
+                          (night ? Color.LTGRAY : Color.DKGRAY);
+
+                      TextView item = t(
+                          navIcons[i] + "\n" + labels[i], 12, color,
+                          tab == i);
+                      item.setGravity(Gravity.CENTER);
+                      item.setPadding(d(2), d(5), d(2), d(5));
+                      item.setOnClickListener(v -> {
+                          tab = selected;
+                          render();
+                      });
+                      nav.addView(item,
+                          new LinearLayout.LayoutParams(0, d(60), 1));
+                  }
+
+                  LinearLayout.LayoutParams np = lp(-1, -2);
+                  np.setMargins(d(9), d(3), d(9), d(8));
+                  root.addView(nav, np);
+
+                  if (tab == 0) home();
+                  else if (tab == 1) ratesPage();
+                  else if (tab == 2) lotsPage();
+                  else profile();
+              }
+
+              void home() {
+                  TextView greeting = t(
+                      tr("Namaskar!", "नमस्कार!", "नमस्कार!"),
+                      20, fg, true);
+                  greeting.setGravity(Gravity.CENTER);
+                  body.addView(greeting, lp(-1, 34));
+
+                  TextView subtitle = t(
+                      tr("Sell e-waste safely and easily",
+                          "ई-कचरा सुरक्षित और आसानी से बेचें",
+                          "ई-कचरा सुरक्षितपणे आणि सहज विका"),
+                      13, muted, false);
+                  subtitle.setGravity(Gravity.CENTER);
+                  body.addView(subtitle, lp(-1, 36));
+
+                  LinearLayout earnings = panel();
+                  earnings.addView(t(
+                      tr("Earnings ledger", "कमाई का हिसाब", "कमाईचा हिशोब"),
+                      17, fg, true));
+                  earnings.addView(t(
+                      tr("Total earnings (demo)", "कुल कमाई (डेमो)",
+                          "एकूण कमाई (डेमो)"), 14, muted, false));
+                  earnings.addView(t(
+                      "₹" + pref.getInt("earnings", 1240),
+                      30, night ? lime : green, true));
+                  earnings.addView(t(
+                      tr("Illustrative balance only", "केवल उदाहरण",
+                          "फक्त उदाहरण"), 12, muted, false));
+                  body.addView(earnings, lp(-1, -2));
+
+                  heading(tr("Material rates (₹ / kg)",
+                      "सामग्री के भाव (₹ / किलो)",
+                      "साहित्याचे दर (₹ / किलो)"));
+
+                  for (int r = 0; r < 2; r++) {
+                      LinearLayout prices = row();
+
+                      for (int c = 0; c < 3; c++) {
+                          int i = r * 3 + c;
+                          LinearLayout tile = col();
+                          tile.setGravity(Gravity.CENTER);
+                          tile.setBackground(shape(card,
+                              night ? Color.rgb(46, 118, 85)
+                                    : Color.rgb(225, 232, 225), 13));
+                          pad(tile, 5);
+
+                          TextView icon = t(icons[i], 25, lime, true);
+                          icon.setGravity(Gravity.CENTER);
+                          tile.addView(icon, lp(-1, 32));
+
+                          TextView name = t(materialName(i), 11, fg, true);
+                          name.setGravity(Gravity.CENTER);
+                          tile.addView(name, lp(-1, 34));
+
+                          TextView price = t("₹" + rates[i], 16, fg, true);
+                          price.setGravity(Gravity.CENTER);
+                          tile.addView(price);
+
+                          LinearLayout.LayoutParams p =
+                              new LinearLayout.LayoutParams(0, d(103), 1);
+                          p.setMargins(d(3), d(3), d(3), d(3));
+                          prices.addView(tile, p);
+                      }
+                      body.addView(prices);
+                  }
+
+                  body.addView(t(tr(
+                      "Demo prices only; not live market rates.",
+                      "ये डेमो भाव हैं, लाइव बाजार दरें नहीं।",
+                      "हे डेमो दर आहेत; थेट बाजारभाव नाहीत."),
+                      11, muted, false), lp(-1, 30));
+
+                  Button camera = button(tr(
+                      "📷 Scrap Camera / Gallery",
+                      "📷 स्क्रैप कैमरा / गैलरी",
+                      "📷 भंगार कॅमेरा / गॅलरी"));
+                  camera.setOnClickListener(v -> choosePhoto());
+                  body.addView(camera, lp(-1, 52));
+
+                  Button add = button(tr("＋ Add Scrap Lot",
+                      "＋ स्क्रैप लॉट जोड़ें", "＋ भंगार लॉट जोडा"));
+                  add.setOnClickListener(v -> addLot());
+                  LinearLayout.LayoutParams p = lp(-1, 50);
+                  p.setMargins(0, d(7), 0, 0);
+                  body.addView(add, p);
+              }
+
+              void choosePhoto() {
+                  String[] choices = {
+                      tr("Take photo", "फोटो खींचें", "फोटो काढा"),
+                      tr("Choose from gallery",
+                          "गैलरी से चुनें", "गॅलरीमधून निवडा")
+                  };
+
+                  new AlertDialog.Builder(this)
+                      .setTitle(tr("Vernacular AI Camera",
+                          "स्थानीय भाषा AI कैमरा",
+                          "स्थानिक भाषा AI कॅमेरा"))
+                      .setItems(choices, (dialog, which) -> {
+                          try {
+                              Intent intent;
+                              if (which == 0) {
+                                  intent = new Intent(
+                                      MediaStore.ACTION_IMAGE_CAPTURE);
+                                  if (intent.resolveActivity(
+                                      getPackageManager()) != null) {
+                                      startActivityForResult(intent, 73);
+                                  } else {
+                                      toast(tr("No camera app found",
+                                          "कैमरा ऐप नहीं मिला",
+                                          "कॅमेरा अॅप सापडले नाही"));
+                                  }
+                              } else {
+                                  intent = new Intent(
+                                      Intent.ACTION_OPEN_DOCUMENT);
+                                  intent.addCategory(
+                                      Intent.CATEGORY_OPENABLE);
+                                  intent.setType("image/*");
+                                  startActivityForResult(intent, 72);
+                              }
+                          } catch (Exception e) {
+                              toast(tr("Unable to open camera or gallery",
+                                  "कैमरा या गैलरी नहीं खुल सकी",
+                                  "कॅमेरा किंवा गॅलरी उघडता आली नाही"));
+                          }
+                      })
+                      .setNegativeButton(tr("Cancel", "रद्द करें", "रद्द करा"),
+                          null)
+                      .show();
+              }
+
+              @Override
+              protected void onActivityResult(int requestCode,
+                  int resultCode, Intent data) {
+                  super.onActivityResult(requestCode, resultCode, data);
+                  if (resultCode != RESULT_OK) return;
+
+                  if (requestCode == 72 && data != null &&
+                      data.getData() != null) {
+                      Uri uri = data.getData();
+                      pref.edit().putString("photo", uri.toString()).apply();
+                      showCameraAssistant();
+                  } else if (requestCode == 73 && data != null &&
+                      data.getExtras() != null) {
+                      Object result = data.getExtras().get("data");
+                      if (result instanceof Bitmap) {
+                          cameraPhoto = (Bitmap) result;
+                          showCameraAssistant();
+                      }
+                  }
+              }
+
+              void showCameraAssistant() {
+                  new AlertDialog.Builder(this)
+                      .setTitle(tr("Camera Assistant",
+                          "कैमरा सहायक", "कॅमेरा सहाय्यक"))
+                      .setMessage(tr(
+                          "Photo captured or selected. Automatic AI " +
+                          "recognition is not connected yet. Choose the " +
+                          "material manually before saving the lot.",
+                          "फोटो लिया या चुना गया। स्वचालित AI पहचान अभी " +
+                          "नहीं जुड़ी है। लॉट सेव करने से पहले सामग्री " +
+                          "स्वयं चुनें।",
+                          "फोटो घेतला किंवा निवडला. स्वयंचलित AI ओळख " +
+                          "अजून जोडलेली नाही. लॉट जतन करण्यापूर्वी " +
+                          "साहित्य स्वतः निवडा."))
+                      .setPositiveButton(tr("Add scrap lot",
+                          "स्क्रैप लॉट जोड़ें", "भंगार लॉट जोडा"),
+                          (dialog, which) -> addLot())
+                      .setNegativeButton(tr("Close", "बंद करें", "बंद करा"),
+                          null)
+                      .show();
+              }
+
+             private void uploadLotToSupabase(JSONObject item) {
+             new Thread(() -> {
+             HttpURLConnection connection = null;
+
+                try {
+                URL url = new URL(
+                SUPABASE_URL + "/rest/v1/scrap_lots"
+             );
+
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setDoOutput(true);
+
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+
+            connection.setRequestProperty("apikey", SUPABASE_KEY);
+            connection.setRequestProperty("Content-Type", "application/json");
+             connection.setRequestProperty("Prefer", "return=minimal");
+            
+            JSONObject record = new JSONObject();
+            record.put("id", item.getString("id"));
+            record.put("material", item.getString("material"));
+            record.put("weight", item.getDouble("weight"));
+            record.put("location", item.optString("location", ""));
+            record.put("status", "Pending");
+
+            byte[] payload = record.toString().getBytes(
+                StandardCharsets.UTF_8
+            );
+
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(payload);
+            }
+
+            int code = connection.getResponseCode();
+            java.io.InputStream stream =
+            (code >= 200 && code < 400)
+            ? connection.getInputStream()
+           : connection.getErrorStream();
+
+           java.io.ByteArrayOutputStream buffer =
+           new java.io.ByteArrayOutputStream();
+
+           if (stream != null) {
+           byte[] bytes = new byte[1024];
+           int count;
+
+           while ((count = stream.read(bytes)) != -1) {
+            buffer.write(bytes, 0, count);
+           }
+          stream.close();
+           }
+
+          String serverMessage = buffer.toString("UTF-8");
+
+           android.util.Log.e(
+           "SUPABASE_UPLOAD",
+            "HTTP " + code + ": " + serverMessage
+           );
+
+            runOnUiThread(() -> {
+                if (code >= 200 && code < 300) {
+                    toast("Lot saved online successfully");
+                } else {
+             new AlertDialog.Builder(MainActivity.this)
+             .setTitle("Supabase HTTP " + code)
+            .setMessage(serverMessage)
+             .setPositiveButton("OK", null)
+             .show();
+             }
+             });
+
+            } catch (Exception e) {
+            runOnUiThread(() ->
+                toast("Online sync failed. Check internet and settings.")
+            );
+            } finally {
+            if (connection != null) {
+                connection.disconnect();
+             }
+            }
+           }).start();
+            }
+
+
+              void addLot() {
+                  LinearLayout form = col();
+                  pad(form, 12);
+
+                  EditText material = new EditText(this);
+                  material.setSingleLine(true);
+                  material.setHint(tr("Material (e.g. PCB)",
+                      "सामग्री (जैसे PCB)", "साहित्य (उदा. PCB)"));
+                  form.addView(material, lp(-1, 50));
+
+                  EditText weight = new EditText(this);
+                  weight.setSingleLine(true);
+                  weight.setInputType(8194);
+                  weight.setHint(tr("Weight in kg", "वजन किलो में",
+                      "वजन किलोमध्ये"));
+                  form.addView(weight, lp(-1, 50));
+
+                  EditText location = new EditText(this);
+                  location.setSingleLine(true);
+                  location.setHint(tr("Location (optional)",
+                      "स्थान (वैकल्पिक)", "ठिकाण (पर्यायी)"));
+                  form.addView(location, lp(-1, 50));
+
+                  new AlertDialog.Builder(this)
+                      .setTitle(tr("New scrap lot", "नया स्क्रैप लॉट",
+                          "नवीन भंगार लॉट"))
+                      .setView(form)
+                      .setNegativeButton(tr("Cancel", "रद्द करें", "रद्द करा"),
+                          null)
+                      .setPositiveButton(tr("Save", "सेव करें", "जतन करा"),
+                          (dialog, which) -> {
+                          try {
+                              String name = material.getText().toString().trim();
+                              double kg = Double.parseDouble(
+                                  weight.getText().toString().trim());
+
+                              if (name.isEmpty() || kg <= 0) {
+                                  throw new Exception();
+                              }
+
+                              JSONArray lots = new JSONArray(
+                                  pref.getString("lots", "[]"));
+                              JSONObject item = new JSONObject();
+                              item.put("id", "KS-" +
+                                  (System.currentTimeMillis() % 1000000));
+                              item.put("material", name);
+                              item.put("weight", kg);
+                              item.put("location",
+                                  location.getText().toString().trim());
+                              item.put("photo",
+                                  pref.getString("photo", ""));
+                              lots.put(item);
+
+                              pref.edit().putString("lots", lots.toString())
+                                  .apply();
+                                  uploadLotToSupabase(item);
+                              tab = 2;
+                              render();
+                              toast(tr("Lot saved", "लॉट सेव हुआ",
+                                  "लॉट जतन झाला"));
+                          } catch (Exception e) {
+                              toast(tr("Enter material and valid weight",
+                                  "सामग्री और सही वजन दर्ज करें",
+                                  "साहित्य आणि योग्य वजन भरा"));
+                          }
+                      }).show();
+              }
+
+              void ratesPage() {
+                  heading(tr("Buying rates", "खरीद दरें", "खरेदी दर"));
+                  body.addView(t(tr(
+                      "Demo prices only; confirm actual rates locally.",
+                      "डेमो भाव हैं; वास्तविक दर की पुष्टि करें।",
+                      "डेमो दर आहेत; प्रत्यक्ष दर तपासा."),
+                      12, muted, false), lp(-1, 34));
+
+                  for (int i = 0; i < materials.length; i++) {
+                      LinearLayout panel = panel();
+                      LinearLayout line = row();
+                      line.addView(t(icons[i], 26, lime, true), lp(44, 42));
+
+                      LinearLayout details = col();
+                      details.addView(t(materialName(i), 16, fg, true));
+                      details.addView(t("₹" + rates[i] + " / kg",
+                          19, fg, true));
+                      line.addView(details,
+                          new LinearLayout.LayoutParams(0, -2, 1));
+                      panel.addView(line);
+
+                      LinearLayout.LayoutParams p = lp(-1, -2);
+                      p.setMargins(0, 0, 0, d(9));
+                      body.addView(panel, p);
+                  }
+              }
+              private void fetchAndMergeLots() {
+              new Thread(() -> {
+              HttpURLConnection connection = null;
+                try {
+                URL url = new URL(
+                SUPABASE_URL
+                + "/rest/v1/scrap_lots"
+                + "?select=id,material,weight,location,status"
+                 );
+
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("apikey", SUPABASE_KEY);
+            connection.setRequestProperty("Accept", "application/json");
+
+            int code = connection.getResponseCode();
+
+            java.io.InputStream stream =
+                (code >= 200 && code < 300)
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+
+            java.io.ByteArrayOutputStream buffer =
+                new java.io.ByteArrayOutputStream();
+
+            if (stream != null) {
+                byte[] bytes = new byte[4096];
+                int count;
+
+                while ((count = stream.read(bytes)) != -1) {
+                    buffer.write(bytes, 0, count);
+                }
+                stream.close();
+            }
+
+            String response = buffer.toString("UTF-8");
+
+            if (code < 200 || code >= 300) {
+                throw new Exception(
+                    "Supabase HTTP " + code + ": " + response
+                );
+            }
+
+            JSONArray onlineLots = new JSONArray(response);
+            JSONArray localLots;
+
+            try {
+                localLots = new JSONArray(
+                    pref.getString("lots", "[]")
+                );
+            } catch (Exception ignored) {
+                localLots = new JSONArray();
+            }
+
+            JSONArray merged = new JSONArray();
+            java.util.HashSet<String> ids =
+                new java.util.HashSet<>();
+
+            for (int i = 0; i < onlineLots.length(); i++) {
+                JSONObject item = onlineLots.optJSONObject(i);
+                if (item == null) continue;
+
+                merged.put(item);
+
+                String id = item.optString("id", "");
+                if (!id.isEmpty()) {
+                    ids.add(id);
+                }
+            }
+
+            for (int i = 0; i < localLots.length(); i++) {
+                JSONObject item = localLots.optJSONObject(i);
+                if (item == null) continue;
+
+                String id = item.optString("id", "");
+
+                if (id.isEmpty() || !ids.contains(id)) {
+                    merged.put(item);
+
+                    if (!id.isEmpty()) {
+                        ids.add(id);
+                    }
+                }
+            }
+
+            final JSONArray finalLots = merged;
+            final int onlineCount = onlineLots.length();
+
+            runOnUiThread(() -> {
+                pref.edit()
+                    .putString("lots", finalLots.toString())
+                    .apply();
+
+                if (tab == 2) {
+                    render();
+                }
+
+                toast("Supabase records loaded: " + onlineCount);
+                });
+
+                } catch (Exception e) {
+                android.util.Log.e(
+                "SUPABASE_FETCH",
+                "Failed to fetch scrap lots",
+                e
+               );
+
+               runOnUiThread(() -> {
+                lotsFetchStarted = false;
+                toast("Online sync failed. Check internet and SELECT policy.");
+                 });
+
+                } finally {
+                if (connection != null) {
+                 connection.disconnect();
+                 }
+                 }
+                 }).start();
+                  }
+
+                 void lotsPage() {
+                  heading(tr("My scrap lots", "मेरे स्क्रैप लॉट्स",
+                      "माझे भंगार लॉट"));
+
+                  Button add = button(tr("＋ Add lot", "＋ लॉट जोड़ें",
+                      "＋ लॉट जोडा"));
+                  add.setOnClickListener(v -> addLot());
+                  body.addView(add, lp(-1, 48));
+
+                  JSONArray lots;
+                  try {
+                      lots = new JSONArray(pref.getString("lots", "[]"));
+                  } catch (Exception e) {
+                      lots = new JSONArray();
+                  }
+                  if (!lotsFetchStarted) {
+                  lotsFetchStarted = true;
+                   fetchAndMergeLots();
+                   }
+
+                  if (lots.length() == 0) {
+                      TextView empty = t(tr(
+                          "No lots yet. Add one above.",
+                          "अभी कोई लॉट नहीं है। ऊपर से जोड़ें।",
+                          "अद्याप लॉट नाही. वरून जोडा."),
+                          15, muted, false);
+                      empty.setGravity(Gravity.CENTER);
+                      body.addView(empty, lp(-1, 100));
+                  }
+
+                  for (int i = lots.length() - 1; i >= 0; i--) {
+                      JSONObject item = lots.optJSONObject(i);
+                      if (item == null) continue;
+
+                      LinearLayout panel = panel();
+                      panel.addView(t(item.optString("material"),
+                          17, fg, true));
+                      panel.addView(t("ID: " + item.optString("id"),
+                          12, muted, false));
+                      panel.addView(t(tr("Weight: ", "वजन: ", "वजन: ") +
+                          item.optDouble("weight") + " kg", 14, fg, true));
+
+                      if (!item.optString("location").isEmpty()) {
+                          panel.addView(t(tr("Location: ", "स्थान: ",
+                              "ठिकाण: ") + item.optString("location"),
+                              13, fg, false));
+                      }
+
+                      panel.addView(t(tr("Status: Pending",
+                          "स्थिति: लंबित", "स्थिती: प्रलंबित"),
+                          13, fg, true));
+
+                      LinearLayout.LayoutParams p = lp(-1, -2);
+                      p.setMargins(0, d(10), 0, 0);
+                      body.addView(panel, p);
+                  }
+              }
+
+              void profile() {
+                  heading(tr("App Settings", "ऐप सेटिंग्स",
+                      "अॅप सेटिंग्ज"));
+
+                  LinearLayout profile = panel();
+                  profile.addView(t("कबाड़ी साथी / Kabadi Saathi",
+                      20, fg, true));
+                  profile.addView(t(tr("Language and appearance",
+                      "भाषा और दिखावट", "भाषा आणि स्वरूप"),
+                      14, muted, false));
+                  body.addView(profile, lp(-1, -2));
+
+                  Button languageButton = button(tr(
+                      "Language: English / Hindi / Marathi",
+                      "भाषा बदलें / हिंदी",
+                      "भाषा बदला / मराठी"));
+                  languageButton.setOnClickListener(v -> chooseLanguage());
+                  LinearLayout.LayoutParams languageParams = lp(-1, 50);
+                  languageParams.setMargins(0, d(9), 0, 0);
+                  body.addView(languageButton, languageParams);
+
+                  Button themeButton = button(tr(
+                      night ? "Switch to day mode" : "Switch to night mode",
+                      night ? "दिन मोड चालू करें" : "रात मोड चालू करें",
+                      night ? "दिवस मोड सुरू करा" : "रात्र मोड सुरू करा"));
+                  themeButton.setOnClickListener(v -> {
+                      night = !night;
+                      pref.edit().putBoolean("night_mode", night).apply();
+                      render();
+                  });
+                  LinearLayout.LayoutParams themeParams = lp(-1, 50);
+                  themeParams.setMargins(0, d(8), 0, 0);
+                  body.addView(themeButton, themeParams);
+
+                  heading(tr("Safety tips", "सुरक्षा सुझाव",
+                      "सुरक्षा सूचना"));
+                  body.addView(t(tr(
+                      "• Do not cut or burn batteries.\n" +
+                      "• Keep e-waste separated.\n" +
+                      "• Wear gloves and wash your hands.",
+                      "• बैटरी को काटें या जलाएँ नहीं।\n" +
+                      "• ई-कचरे को अलग रखें।\n" +
+                      "• दस्ताने पहनें और हाथ धोएँ।",
+                      "• बॅटरी कापू किंवा जाळू नका.\n" +
+                      "• ई-कचरा वेगळा ठेवा.\n" +
+                      "• हातमोजे घाला आणि हात धुवा."),
+                      14, muted, false), lp(-1, -2));
+
+                  gap(12);
+                  body.addView(t(tr(
+                      "Prices and earnings are demo data. AI recognition, " +
+                      "live prices, payments and recycler verification " +
+                      "are not connected.",
+                      "भाव और कमाई डेमो डेटा हैं। AI पहचान, लाइव भाव, " +
+                      "भुगतान और रीसाइक्लर सत्यापन अभी जुड़े नहीं हैं।",
+                      "दर आणि कमाई डेमो डेटा आहेत. AI ओळख, थेट दर, " +
+                      "पेमेंट आणि रीसायकलर पडताळणी जोडलेली नाही."),
+                      12, muted, false), lp(-1, -2));
+              }
+
+              void chooseLanguage() {
+                  String[] choices = {
+                      "हिंदी (Hindi)",
+                      "मराठी (Marathi)",
+                      "English"
+                  };
+
+                  int selected = "hi".equals(language) ? 0 :
+                      "mr".equals(language) ? 1 : 2;
+
+                  new AlertDialog.Builder(this)
+                      .setTitle(tr("Choose app language",
+                          "ऐप की भाषा चुनें", "अॅपची भाषा निवडा"))
+                      .setSingleChoiceItems(choices, selected,
+                          (dialog, which) -> {
+                              language = which == 0 ? "hi" :
+                                  which == 1 ? "mr" : "en";
+                              pref.edit().putString("language", language)
+                                  .apply();
+                              dialog.dismiss();
+                              render();
+                          })
+                      .setNegativeButton(tr("Cancel", "रद्द करें",
+                          "रद्द करा"), null)
+                      .show();
+              }
+          }
+          EOF
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EcoCycle-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
