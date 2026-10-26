@@ -1399,6 +1399,46 @@ jobs:
             .putBoolean("recycler_authorized", recyclerAuthorized)
             .apply();
              }
+             
+            Button button(String label) {
+            Button b = new Button(this);
+           b.setText(label);
+           b.setTextSize(14);
+           b.setAllCaps(false);
+          b.setTypeface(null, Typeface.BOLD);
+          b.setTextColor(green);
+          b.setBackground(shape(lime, 0, 13));
+          return b;
+          }
+          
+          Button secondaryButton(String label) {
+          Button b = button(label);
+          b.setTextColor(fg);
+          b.setBackground(shape(
+            card,
+            night ? Color.rgb(46, 118, 85)
+                  : Color.rgb(215, 225, 216),
+            13
+           ));
+           return b;
+           }
+           
+           EditText edit(String hint, int inputType) {
+           EditText e = new EditText(this);
+           e.setSingleLine(true);
+           e.setTextSize(15);
+           e.setHint(hint);
+
+           e.setInputType(
+            inputType == 0
+                    ? (android.text.InputType.TYPE_CLASS_TEXT
+                       | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+                    : inputType
+           );
+
+          return e;
+           }
+
            }
           EOF
 
