@@ -134,6 +134,7 @@ jobs:
           import org.json.JSONObject;
           import java.net.HttpURLConnection;
           import java.net.URL;
+          import java.io.InputStream;
           import java.io.OutputStream;
           import java.nio.charset.StandardCharsets;
           import java.io.ByteArrayOutputStream;
@@ -1310,9 +1311,96 @@ jobs:
             }
            }
           }
+          
+          private synchronized void refreshIfNeeded() throws Exception {
+          long now = System.currentTimeMillis() / 1000L;
 
+          if (refreshToken.isEmpty()
+            || tokenExpiresAt == 0
+            || now < tokenExpiresAt - 60) {
+            return;
+          }
+
+          JSONObject body = new JSONObject();
+           body.put("refresh_token", refreshToken);
+
+          String response = httpRequest(
+            "/auth/v1/token?grant_type=refresh_token",
+            "POST",
+            body,
+            false,
+            null
+            );
+
+           JSONObject result = new JSONObject(response);
+
+           if (!result.optString("access_token", "").isEmpty()) {
+            accessToken = result.getString("access_token");
+           refreshToken = result.optString(
+                "refresh_token", refreshToken);
+
+             tokenExpiresAt = now
+                + result.optLong("expires_in", 3600);
+
+             pref.edit()
+                .putString("access_token", accessToken)
+                .putString("refresh_token", refreshToken)
+                .putLong("token_expires_at", tokenExpiresAt)
+                .apply();
              }
-            EOF
+             }
+             
+            private void ensureProfile(boolean register) throws Exception {
+            String raw = httpRequest(
+            "/rest/v1/user_profiles?select=id,role,display_name,is_authorized&id=eq."
+                    + userId,
+            "GET",
+            null,
+            true,
+            null
+           );
+
+          JSONArray rows = new JSONArray(raw);
+          
+          if (rows.length() > 0) {
+          JSONObject profile = rows.getJSONObject(0);
+
+            String storedRole = profile.optString("role", currentRole);
+
+           if (!storedRole.equals(currentRole)) {
+            throw new Exception(
+                    "Account role does not match this login screen.");
+            }
+
+             displayName = profile.optString("display_name", displayName);
+           recyclerAuthorized = profile.optBoolean(
+                "is_authorized", false);
+
+           } else {
+            JSONObject profile = new JSONObject();
+           profile.put("id", userId);
+           profile.put("role", currentRole);
+           profile.put("display_name", displayName);
+           profile.put("is_authorized", "collector".equals(currentRole));
+
+            httpRequest(
+                "/rest/v1/user_profiles",
+                "POST",
+                profile,
+                true,
+                "return=minimal"
+              );
+
+             recyclerAuthorized = "collector".equals(currentRole);
+             }
+
+            pref.edit()
+            .putString("display_name", displayName)
+            .putBoolean("recycler_authorized", recyclerAuthorized)
+            .apply();
+             }
+           }
+          EOF
 
       - uses: gradle/actions/setup-gradle@v4
         with:
