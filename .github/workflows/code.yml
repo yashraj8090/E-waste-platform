@@ -136,6 +136,8 @@ jobs:
           import java.net.URL;
           import java.io.OutputStream;
           import java.nio.charset.StandardCharsets;
+          import java.io.ByteArrayOutputStream;
+          
            
           public class MainActivity extends Activity {
           private static final String SUPABASE_URL =
@@ -173,17 +175,40 @@ jobs:
               final String[] rates = {"120", "60", "40", "50", "15", "20"};
               final String[] icons = {"▦", "⌁", "▯", "⚙", "♧", "▣"};
 
-              @Override
-              String screen = "role";
-              String roleChoice = "collector";
               
-              public void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  pref = getSharedPreferences("ecocycle", MODE_PRIVATE);
-                  night = pref.getBoolean("night_mode", true);
-                  language = pref.getString("language", "hi");
-                  render();
-              }
+             String screen = "role";
+             String roleChoice = "collector";
+             String currentRole = "";
+             String userId = "";
+             String accessToken = "";
+             String refreshToken = "";
+             String email = "";
+             String displayName = "";
+             boolean recyclerAuthorized = false;
+             long tokenExpiresAt = 0;
+
+             @Override
+             public void onCreate(Bundle savedInstanceState) {
+             super.onCreate(savedInstanceState);
+
+            pref = getSharedPreferences("ecocycle", MODE_PRIVATE);
+
+            night = pref.getBoolean("night_mode", true);
+            language = pref.getString("language", "hi");
+
+            currentRole = pref.getString("current_role", "");
+            userId = pref.getString("user_id", "");
+            accessToken = pref.getString("access_token", "");
+            refreshToken = pref.getString("refresh_token", "");
+            email = pref.getString("email", "");
+            displayName = pref.getString("display_name", "");
+            recyclerAuthorized = pref.getBoolean("recycler_authorized", false);
+            tokenExpiresAt = pref.getLong("token_expires_at", 0);
+            screen = userId.isEmpty() || accessToken.isEmpty()
+            ? "role" : "app";
+
+            render();
+            }
 
               String tr(String en, String hi, String mr) {
                   if ("mr".equals(language)) return mr;
@@ -1086,8 +1111,208 @@ jobs:
                           "रद्द करा"), null)
                       .show();
               }
+              void authenticate(boolean register, String chosenRole,
+                  String name, String mail, String password) {
+             if (mail.isEmpty() || !mail.contains("@")
+            || password.length() < 6
+            || (register && name.isEmpty())) {
+            toast("Enter a valid email, password (6+ characters)"
+                + (register ? " and name." : "."));
+            return;
+             } 
+
+           toast(register ? "Creating account..." : "Signing in...");
+
+           new Thread(() -> {
+           try {
+             JSONObject payload = new JSONObject();
+            payload.put("email", mail);
+            payload.put("password", password);
+
+            String path;
+            if (register) {
+                path = "/auth/v1/signup";
+                JSONObject data = new JSONObject();
+                data.put("role", chosenRole);
+                data.put("display_name", name);
+                payload.put("data", data);
+            } else {
+                path = "/auth/v1/token?grant_type=password";
+            }
+
+            String response = httpRequest(
+                    path, "POST", payload, false, null);
+
+            JSONObject result = new JSONObject(response);
+            String token = result.optString("access_token", "");
+            JSONObject user = result.optJSONObject("user");
+
+            if (user == null && result.has("id")) {
+                user = result;
+            }
+
+            if (token.isEmpty() || user == null) {
+                runOnUiThread(() ->
+                    new AlertDialog.Builder(this)
+                        .setTitle("Email confirmation may be required")
+                        .setMessage("Check your email confirmation settings, "
+                                + "confirm your account if required, then log in.")
+                        .setPositiveButton("OK", null)
+                        .show());
+                return;
+            }
+
+            String id = user.optString("id", "");
+            JSONObject metadata = user.optJSONObject("user_metadata");
+            String savedRole = metadata == null ? ""
+                    : metadata.optString("role", "");
+            String savedName = metadata == null ? name
+                    : metadata.optString("display_name", name);
+
+            if (!savedRole.isEmpty()
+                    && !savedRole.equals(chosenRole)) {
+                throw new Exception(
+                        "Choose the account type used during registration.");
+            }
+
+            if (id.isEmpty()) {
+                throw new Exception("Supabase did not return a user ID.");
+            }
+
+            userId = id;
+            accessToken = token;
+            refreshToken = result.optString("refresh_token", "");
+            tokenExpiresAt = System.currentTimeMillis() / 1000L
+                    + result.optLong("expires_in", 3600);
+            currentRole = savedRole.isEmpty() ? chosenRole : savedRole;
+            email = mail;
+            displayName = savedName == null ? "" : savedName;
+
+            pref.edit()
+                    .putString("access_token", accessToken)
+                    .putString("refresh_token", refreshToken)
+                    .putLong("token_expires_at", tokenExpiresAt)
+                    .putString("user_id", userId)
+                    .putString("current_role", currentRole)
+                    .putString("email", email)
+                    .putString("display_name", displayName)
+                    .apply();
+
+            ensureProfile(register);
+
+            runOnUiThread(() -> {
+                screen = "app";
+                tab = 0;
+                render();
+
+                if ("recycler".equals(currentRole)
+                        && !recyclerAuthorized) {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Verification pending")
+                            .setMessage("Recycler account authorisation is pending.")
+                            .setPositiveButton("OK", null)
+                            .show();
+                } else {
+                    toast("Welcome to Kabadi Saathi");
+                }
+            });
+
+            } catch (Exception e) {
+            String msg = e.getMessage() == null
+                    ? "Authentication failed. Check internet and Supabase settings."
+                    : e.getMessage();
+
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Login / registration failed")
+                    .setMessage(msg)
+                    .setPositiveButton("OK", null)
+                    .show());
+                }
+               }).start();
+               }
+               
+               private String httpRequest(
+               String path,
+               String method,
+               JSONObject payload,
+               boolean auth,
+               String prefer) throws Exception {
+
+             if (auth) {
+             refreshIfNeeded();
+             }
+
+            HttpURLConnection connection = null;
+
+             try {
+             URL url = new URL(SUPABASE_URL + path);
+             connection = (HttpURLConnection) url.openConnection();
+
+            connection.setRequestMethod(method);
+             connection.setConnectTimeout(20000);
+           connection.setReadTimeout(20000);
+            connection.setRequestProperty("apikey", SUPABASE_KEY);
+            connection.setRequestProperty("Accept", "application/json");
+            if (auth && !accessToken.isEmpty()) {
+            connection.setRequestProperty(
+                    "Authorization", "Bearer " + accessToken);
+            }
+
+              if (payload != null) {
+            connection.setDoOutput(true);
+            connection.setRequestProperty(
+                    "Content-Type", "application/json; charset=utf-8");
+
+            byte[] bytes = payload.toString()
+                    .getBytes(StandardCharsets.UTF_8);
+
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(bytes);
+            }
+            }
+
+           if (prefer != null) {
+            connection.setRequestProperty("Prefer", prefer);
+           }
+
+            int code = connection.getResponseCode();
+
+            InputStream stream = (code >= 200 && code < 300)
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+            if (stream != null) {
+            byte[] bytes = new byte[4096];
+            int n;
+
+            while ((n = stream.read(bytes)) != -1) {
+                buffer.write(bytes, 0, n);
+            }
+
+            stream.close();
+           }
+
+            String response = buffer.toString("UTF-8");
+
+            if (code < 200 || code >= 300) {
+            throw new Exception(
+                    "Supabase HTTP " + code + ": " + response);
+             }
+
+            return response;
+
+           } finally {
+            if (connection != null) {
+            connection.disconnect();
+            }
+           }
           }
-          EOF
+
+             }
+            EOF
 
       - uses: gradle/actions/setup-gradle@v4
         with:
