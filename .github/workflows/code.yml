@@ -286,17 +286,6 @@ jobs:
             return x;
             }
 
-              Button button(String label) {
-                  Button button = new Button(this);
-                  button.setText(label);
-                  button.setTextSize(14);
-                  button.setAllCaps(false);
-                  button.setTypeface(null, Typeface.BOLD);
-                  button.setTextColor(green);
-                  button.setBackground(shape(lime, 0, 13));
-                  return button;
-              }
-
               void heading(String label) {
                   TextView view = t(label, 19, fg, true);
                   LinearLayout.LayoutParams p = lp(-1, -2);
