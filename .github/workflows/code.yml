@@ -363,6 +363,10 @@ jobs:
                    loginScreen();
                    return;
                     }
+                    if ("recycler".equals(screen)) {
+                 recyclerDashboard();
+                 return;
+                  }
 
                   LinearLayout nav = row();
                   nav.setBackground(shape(
@@ -1198,7 +1202,7 @@ jobs:
             ensureProfile(register);
 
             runOnUiThread(() -> {
-                screen = "app";
+                screen = "recycler".equals(currentRole) ? "recycler" : "app";
                 tab = 0;
                 render();
 
