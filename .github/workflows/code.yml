@@ -372,15 +372,18 @@ jobs:
                   nav.setBackground(shape(
                       night ? Color.rgb(5, 57, 45) : Color.WHITE, 0, 18));
 
-                  String[] labels = {
-                      tr("Home", "होम", "होम"),
-                      tr("Rates", "दरें", "दर"),
-                      tr("My Lots", "मेरे लॉट्स", "माझे लॉट"),
-                      tr("Profile", "प्रोफ़ाइल", "प्रोफाइल")
+                  
+                 String[] labels = {
+                 tr("Home", "होम", "होम"),
+                 tr("Rates", "दरें", "दर"),
+                 tr("My Lots", "मेरे लॉट्स", "माझे लॉट"),
+                 "Orders",
+                 tr("Profile", "प्रोफ़ाइल", "प्रोफाइल")
                   };
-                  String[] navIcons = {"⌂", "₹", "▣", "●"};
+                  String[] navIcons = {"⌂", "₹", "▣", "▤", "●"};
 
-                  for (int i = 0; i < 4; i++) {
+
+                  for (int i = 0; i < 5; i++) {
                       final int selected = i;
                       int color = tab == i ? lime :
                           (night ? Color.LTGRAY : Color.DKGRAY);
@@ -402,10 +405,13 @@ jobs:
                   np.setMargins(d(9), d(3), d(9), d(8));
                   root.addView(nav, np);
 
-                  if (tab == 0) home();
-                  else if (tab == 1) ratesPage();
-                  else if (tab == 2) lotsPage();
-                  else profile();
+                  
+                if (tab == 0) home();
+                else if (tab == 1) ratesPage();
+                else if (tab == 2) lotsPage();
+                else if (tab == 3) ordersPage();
+                else profile();
+
               }
               
                void recyclerDashboard() {
