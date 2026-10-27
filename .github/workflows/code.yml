@@ -1446,6 +1446,19 @@ jobs:
            }
           }
           
+           JSONArray fetchAvailableLots() throws Exception {
+           String response = httpRequest(
+           "/rest/v1/scrap_lots?select=id,collector_id,material,weight,location,city,pincode,status,estimated_value,created_at&status=eq.Pending&order=created_at.desc",
+           "GET",
+           null,
+           true,
+           null
+            );
+
+           return new JSONArray(response);
+           }
+
+          
           private synchronized void refreshIfNeeded() throws Exception {
           long now = System.currentTimeMillis() / 1000L;
 
@@ -1571,6 +1584,18 @@ jobs:
            );
 
           return e;
+           }
+           
+          JSONArray fetchAvailableLots() throws Exception {
+          String response = httpRequest(
+          "/rest/v1/scrap_lots?select=id,collector_id,material,weight,location,city,pincode,status,estimated_value&status=eq.Pending&order=created_at.desc",
+          "GET",
+           null,
+           true,
+           null
+           );
+
+           return new JSONArray(response);
            }
 
            }
