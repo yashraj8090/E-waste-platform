@@ -1251,6 +1251,9 @@ jobs:
            connection.setReadTimeout(20000);
             connection.setRequestProperty("apikey", SUPABASE_KEY);
             connection.setRequestProperty("Accept", "application/json");
+            if (prefer != null) {
+            connection.setRequestProperty("Prefer", prefer);
+            }
             if (auth && !accessToken.isEmpty()) {
             connection.setRequestProperty(
                     "Authorization", "Bearer " + accessToken);
@@ -1269,9 +1272,7 @@ jobs:
             }
             }
 
-           if (prefer != null) {
-            connection.setRequestProperty("Prefer", prefer);
-           }
+           
 
             int code = connection.getResponseCode();
 
