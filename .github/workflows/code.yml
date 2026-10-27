@@ -842,8 +842,11 @@ jobs:
                               JSONArray lots = new JSONArray(
                                   pref.getString("lots", "[]"));
                               JSONObject item = new JSONObject();
+                              
                               item.put("id", "KS-" +
                                   (System.currentTimeMillis() % 1000000));
+                                  item.put("collector_id", userId);
+                                  record.put("collector_id", item.getString("collector_id"));
                               item.put("material", name);
                               item.put("weight", kg);
                               item.put("location",
