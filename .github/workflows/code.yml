@@ -735,6 +735,7 @@ jobs:
             
             JSONObject record = new JSONObject();
             record.put("id", item.getString("id"));
+            record.put("collector_id", item.getString("collector_id"));
             record.put("material", item.getString("material"));
             record.put("weight", item.getDouble("weight"));
             record.put("location", item.optString("location", ""));
