@@ -1595,6 +1595,145 @@ jobs:
 
            return new JSONArray(response);
            }
+           
+            void loadAvailableLots(LinearLayout container) {
+            container.removeAllViews();
+
+            TextView loading = t("Loading available lots...", 14, muted, false);
+            container.addView(loading, lp(-1, -2));
+
+            new Thread(() -> {
+             try {
+            JSONArray lots = fetchAvailableLots();
+
+            runOnUiThread(() -> {
+                container.removeAllViews();
+
+                if (lots.length() == 0) {
+                    container.addView(
+                        t("No available lots right now.", 14, muted, false),
+                        lp(-1, -2)
+                    );
+                    return;
+                }
+
+                for (int i = 0; i < lots.length(); i++) {
+                    JSONObject lot = lots.optJSONObject(i);
+                    if (lot == null) continue;
+
+                    LinearLayout itemCard = col();
+                    itemCard.setPadding(d(14), d(12), d(14), d(12));
+                    itemCard.setBackground(shape(card, 0, 12));
+
+                    String material = lot.optString("material", "E-waste");
+                    String weight = lot.optString("weight", "0");
+                    String location = lot.optString("location", "Location not given");
+                    String city = lot.optString("city", "");
+                    String pincode = lot.optString("pincode", "");
+                    String lotId = lot.optString("id", "");
+
+                    itemCard.addView(
+                        t(material, 18, fg, true), lp(-1, -2)
+                    );
+                    itemCard.addView(
+                        t("Weight: " + weight + " kg", 14, muted, false),
+                        lp(-1, -2)
+                    );
+
+                    String place = location;
+                    if (!city.isEmpty()) place += ", " + city;
+                    if (!pincode.isEmpty()) place += " - " + pincode;
+
+                    itemCard.addView(
+                        t(place, 13, muted, false), lp(-1, -2)
+                    );
+
+                    double value = lot.optDouble("estimated_value", 0);
+                    itemCard.addView(
+                        t("Estimated value: ₹" + value, 14, fg, false),
+                        lp(-1, -2)
+                    );
+
+                    gap(8);
+
+                    Button orderButton = secondaryButton("Place Order");
+                    itemCard.addView(orderButton, lp(-1, 46));
+
+                    orderButton.setOnClickListener(v -> {
+                        new AlertDialog.Builder(this)
+                            .setTitle("Place Order")
+                            .setMessage("Place an order for " + material +
+                                " (" + weight + " kg)?")
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Confirm", (dialog, which) ->
+                                createOrder(lotId, lot.optString("collector_id", ""))
+                            )
+                            .show();
+                    });
+
+                    container.addView(itemCard, lp(-1, -2));
+                    gap(12);
+                }
+            });
+            } catch (Exception e) {
+            runOnUiThread(() -> {
+                container.removeAllViews();
+                container.addView(
+                    t("Could not load lots: " + e.getMessage(),
+                        13, muted, false),
+                    lp(-1, -2)
+                );
+            });
+             }
+           }).start();
+           }
+           
+          void createOrder(String lotId, String collectorId) {
+          if (userId == null || userId.isEmpty()) {
+          toast("Please login again.");
+          return;
+          }
+
+          if (collectorId == null || collectorId.isEmpty()) {
+          toast("Collector information is missing for this lot.");
+          return;
+          }   
+
+            new Thread(() -> {
+            try {
+            JSONObject order = new JSONObject();
+            order.put("lot_id", lotId);
+            order.put("collector_id", collectorId);
+            order.put("recycler_id", userId);
+            order.put("status", "pending");
+
+            httpRequest(
+                "/rest/v1/orders",
+                "POST",
+                order,
+                true,
+                "return=minimal"
+            );
+
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Order Placed")
+                    .setMessage("Your order request has been sent to the collector.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            );
+
+            } catch (Exception e) {
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Order Failed")
+                    .setMessage(e.getMessage())
+                    .setPositiveButton("OK", null)
+                    .show()
+            );
+             }
+            }).start();
+             }
 
            }
           EOF
