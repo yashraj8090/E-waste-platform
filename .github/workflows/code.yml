@@ -1052,8 +1052,7 @@ jobs:
                               
                               item.put("id", "KS-" +
                                   (System.currentTimeMillis() % 1000000));
-                                  item.put("collector_id", userId);
-                                  record.put("collector_id", item.getString("collector_id"));
+                              item.put("collector_id", userId);
                               item.put("material", name);
                               item.put("weight", kg);
                               item.put("location",
@@ -1791,15 +1790,6 @@ jobs:
 
           return e;
            }
-           
-          JSONArray fetchAvailableLots() throws Exception {
-          String response = httpRequest(
-          "/rest/v1/scrap_lots?select=id,collector_id,material,weight,location,city,pincode,status,estimated_value&status=eq.Pending&order=created_at.desc",
-          "GET",
-           null,
-           true,
-           null
-           );
 
            return new JSONArray(response);
            }
@@ -1895,12 +1885,6 @@ jobs:
              }
            }).start();
            }
-           
-          void createOrder(String lotId, String collectorId) {
-          if (userId == null || userId.isEmpty()) {
-          toast("Please login again.");
-          return;
-          }
 
           if (collectorId == null || collectorId.isEmpty()) {
           toast("Collector information is missing for this lot.");
