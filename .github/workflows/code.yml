@@ -434,13 +434,11 @@ jobs:
 
           heading("Incoming E-Waste Lots");
 
-           TextView info = t(
-           "No incoming lots yet. Collector submissions will appear here.",
-             14, muted, false
-            );
-           info.setPadding(d(12), d(12), d(12), d(12));
-          info.setBackground(shape(card, 0, 12));
-           body.addView(info, lp(-1, -2));
+           
+           LinearLayout lotsContainer = col();
+           body.addView(lotsContainer, lp(-1, -2));
+           loadAvailableLots(lotsContainer);
+
 
           gap(18);
 
