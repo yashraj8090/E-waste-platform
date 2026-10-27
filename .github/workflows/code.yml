@@ -539,6 +539,208 @@ jobs:
 
               return box;
                }
+               
+               void createOrder(String lotId, String collectorId) {
+              if (userId == null || userId.isEmpty()) {
+              toast("Please login again.");
+               return;
+               }
+
+              if (collectorId == null || collectorId.isEmpty()) {
+               toast("Collector information is missing for this lot.");
+               return;
+                }
+
+              new Thread(() -> {
+               try {
+                JSONObject order = new JSONObject();
+                 order.put("lot_id", lotId);
+            order.put("collector_id", collectorId);
+            order.put("recycler_id", userId);
+            order.put("status", "pending");
+
+            httpRequest(
+                "/rest/v1/orders",
+                "POST",
+                order,
+                true,
+                "return=minimal"
+            );
+
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Order Placed")
+                    .setMessage("Your order request has been sent to the collector.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            );
+
+                } catch (Exception e) {
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Order Failed")
+                    .setMessage(e.getMessage())
+                    .setPositiveButton("OK", null)
+                    .show()
+               );
+            }
+           }).start();
+           }
+           
+           void ordersPage() {
+           heading("Incoming Orders");
+
+          LinearLayout ordersContainer = col();
+           body.addView(ordersContainer, lp(-1, -2));
+
+           loadCollectorOrders(ordersContainer);
+           }
+           
+           void loadCollectorOrders(LinearLayout container) {
+           container.removeAllViews();
+           container.addView(
+           t("Loading orders...", 14, muted, false),
+           lp(-1, -2)
+            );
+
+           new Thread(() -> {
+            try {
+            String response = httpRequest(
+                "/rest/v1/orders?select=id,lot_id,collector_id,recycler_id,status,created_at"
+                    + "&collector_id=eq." + userId
+                    + "&order=created_at.desc",
+                "GET",
+                null,
+                true,
+                null
+            );
+
+            JSONArray orders = new JSONArray(response);
+
+            runOnUiThread(() -> {
+                container.removeAllViews();
+
+                if (orders.length() == 0) {
+                    container.addView(
+                        t("No incoming orders yet.", 14, muted, false),
+                        lp(-1, -2)
+                    );
+                    return;
+                }
+
+                for (int i = 0; i < orders.length(); i++) {
+                    JSONObject order = orders.optJSONObject(i);
+                    if (order == null) continue;
+
+                    String orderId = order.optString("id", "");
+                    String lotId = order.optString("lot_id", "");
+                    String recyclerId = order.optString("recycler_id", "");
+                    String status = order.optString("status", "pending");
+
+                    LinearLayout box = col();
+                    box.setPadding(d(12), d(12), d(12), d(12));
+                    box.setBackground(shape(card, 0, 12));
+
+                    box.addView(
+                        t("Lot: " + lotId, 17, fg, true),
+                        lp(-1, -2)
+                    );
+                    box.addView(
+                        t("Recycler ID: " + recyclerId, 12, muted, false),
+                        lp(-1, -2)
+                    );
+                    box.addView(
+                        t("Status: " + status, 14, muted, false),
+                        lp(-1, -2)
+                    );
+
+                    if ("pending".equalsIgnoreCase(status)) {
+                        LinearLayout actions = row();
+
+                        Button accept = secondaryButton("Accept");
+                        Button reject = secondaryButton("Reject");
+
+                        actions.addView(
+                            accept,
+                            new LinearLayout.LayoutParams(0, d(44), 1)
+                        );
+                        actions.addView(
+                            reject,
+                            new LinearLayout.LayoutParams(0, d(44), 1)
+                        );
+
+                        box.addView(actions, lp(-1, -2));
+
+                        accept.setOnClickListener(v ->
+                            updateOrderStatus(orderId, "accepted", container)
+                        );
+                        reject.setOnClickListener(v ->
+                            updateOrderStatus(orderId, "rejected", container)
+                        );
+                    }
+
+                    container.addView(box, lp(-1, -2));
+                    gap(10);
+                }
+            });
+
+            } catch (Exception e) {
+            runOnUiThread(() -> {
+                container.removeAllViews();
+                container.addView(
+                    t("Could not load orders: " + e.getMessage(), 13, muted, false),
+                    lp(-1, -2)
+                );
+            });
+            }
+           }).start();
+          }
+          
+          void updateOrderStatus(
+          String orderId,
+          String newStatus,
+          LinearLayout container
+          ) {
+           new Thread(() -> {
+           try {
+            JSONObject payload = new JSONObject();
+            payload.put("status", newStatus);
+
+            java.text.SimpleDateFormat formatter =
+                new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                    java.util.Locale.US
+                );
+            formatter.setTimeZone(
+                java.util.TimeZone.getTimeZone("UTC")
+            );
+            payload.put("updated_at", formatter.format(new java.util.Date()));
+
+            httpRequest(
+                "/rest/v1/orders?id=eq." + orderId
+                    + "&collector_id=eq." + userId,
+                "PATCH",
+                payload,
+                true,
+                "return=minimal"
+            );
+
+            runOnUiThread(() -> {
+                toast("Order " + newStatus);
+                loadCollectorOrders(container);
+            });
+
+             } catch (Exception e) {
+            runOnUiThread(() ->
+                new AlertDialog.Builder(this)
+                    .setTitle("Update Failed")
+                    .setMessage(e.getMessage())
+                    .setPositiveButton("OK", null)
+                    .show()
+            );
+            }
+           }).start();
+           }
 
 
               void home() {
