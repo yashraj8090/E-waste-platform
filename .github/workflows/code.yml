@@ -407,6 +407,135 @@ jobs:
                   else if (tab == 2) lotsPage();
                   else profile();
               }
+              
+               void recyclerDashboard() {
+               heading("Recycler Dashboard");
+
+              body.addView(t(
+             "Authorised Recycling Centre",
+              14, muted, false
+              ), lp(-1, -2));
+
+             gap(16);
+
+             LinearLayout stats = row();
+
+             stats.addView(statCard(
+             "Incoming Lots", "0", "Awaiting review"
+              ), new LinearLayout.LayoutParams(0, d(110), 1));
+
+             stats.addView(statCard(
+            "Accepted", "0", "Verified lots"
+             ), new LinearLayout.LayoutParams(0, d(110), 1));
+
+            body.addView(stats, lp(-1, -2));
+
+           gap(18);
+
+          heading("Incoming E-Waste Lots");
+
+           TextView info = t(
+           "No incoming lots yet. Collector submissions will appear here.",
+             14, muted, false
+            );
+           info.setPadding(d(12), d(12), d(12), d(12));
+          info.setBackground(shape(card, 0, 12));
+           body.addView(info, lp(-1, -2));
+
+          gap(18);
+
+          heading("Recycling Records");
+
+          Button records = secondaryButton("View Recycling Records");
+          body.addView(records, lp(-1, 48));
+
+          records.setOnClickListener(v ->
+            new AlertDialog.Builder(this)
+            .setTitle("Recycling Records")
+            .setMessage(
+                "No records available yet. Records will appear " +
+                "after incoming lots are connected to the backend."
+            )
+            .setPositiveButton("OK", null)
+            .show()
+          );
+
+          gap(10);
+
+          Button profileButton = secondaryButton("Recycler Profile");
+          body.addView(profileButton, lp(-1, 48));
+
+             profileButton.setOnClickListener(v -> {
+            new AlertDialog.Builder(this)
+            .setTitle("Recycler Profile")
+            .setMessage(
+                "Name: " + displayName +
+                "\nEmail: " + email +
+                "\nStatus: " +
+                (recyclerAuthorized
+                    ? "Authorised"
+                    : "Verification pending")
+               )
+            .setPositiveButton("OK", null)
+            .show();
+            });
+
+           gap(10);
+
+          Button logout = secondaryButton("Logout");
+          body.addView(logout, lp(-1, 48));
+
+           logout.setOnClickListener(v ->
+            new AlertDialog.Builder(this)
+            .setTitle("Logout")
+            .setMessage("Do you want to log out?")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Logout", (dialog, which) -> {
+                userId = "";
+                accessToken = "";
+                refreshToken = "";
+                tokenExpiresAt = 0;
+                currentRole = "";
+                email = "";
+                displayName = "";
+                recyclerAuthorized = false;
+
+                pref.edit()
+                    .remove("user_id")
+                    .remove("access_token")
+                    .remove("refresh_token")
+                    .remove("token_expires_at")
+                    .remove("current_role")
+                    .remove("email")
+                    .remove("display_name")
+                    .remove("recycler_authorized")
+                    .apply();
+
+                roleChoice = "recycler";
+                screen = "role";
+                render();
+            })
+            .show()
+            );
+            }
+            
+            LinearLayout statCard(String title, String value, String subtitle) {
+            LinearLayout box = col();
+            box.setBackground(shape(card, 0, 14));
+            box.setPadding(d(12), d(10), d(8), d(10));
+
+             TextView titleView = t(title, 12, muted, false);
+              box.addView(titleView, lp(-1, -2));
+
+             TextView valueView = t(value, 25, fg, true);
+              box.addView(valueView, lp(-1, -2));
+
+              TextView subView = t(subtitle, 11, muted, false);
+               box.addView(subView, lp(-1, -2));
+
+              return box;
+               }
+
 
               void home() {
                   TextView greeting = t(
