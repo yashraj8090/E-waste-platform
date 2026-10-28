@@ -1871,19 +1871,18 @@ jobs:
                 }
             });
             } catch (Exception e) {
-            runOnUiThread(() -> {
-                container.removeAllViews();
-                container.addView(
-                    t("Could not load lots: " + e.getMessage(),
-                        13, muted, false),
-                    lp(-1, -2)
+                runOnUiThread(() -> {
+                    container.removeAllViews();
+                    container.addView(
+                        t("Could not load lots: " + e.getMessage(),
+                            13, muted, false),
+                        lp(-1, -2)
                     );
-                  });
-                } 
-               }).start();
-               }
+                });
               }
-             EOF
+            }).start();
+           }
+          EOF
 
       - uses: gradle/actions/setup-gradle@v4
         with:
