@@ -1877,54 +1877,12 @@ jobs:
                     t("Could not load lots: " + e.getMessage(),
                         13, muted, false),
                     lp(-1, -2)
-                );
-            });
-             }
-           }).start();
-           }
-           
-           void createOrder(String lotId, String collectorId) {
-          if (collectorId == null || collectorId.isEmpty()) {
-          toast("Collector information is missing for this lot.");
-          return;
-          }   
-
-            new Thread(() -> {
-            try {
-            JSONObject order = new JSONObject();
-            order.put("lot_id", lotId);
-            order.put("collector_id", collectorId);
-            order.put("recycler_id", userId);
-            order.put("status", "pending");
-
-            httpRequest(
-                "/rest/v1/orders",
-                "POST",
-                order,
-                true,
-                "return=minimal"
-            );
-
-            runOnUiThread(() ->
-                new AlertDialog.Builder(this)
-                    .setTitle("Order Placed")
-                    .setMessage("Your order request has been sent to the collector.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            );
-
-            } catch (Exception e) {
-            runOnUiThread(() ->
-                new AlertDialog.Builder(this)
-                    .setTitle("Order Failed")
-                    .setMessage(e.getMessage())
-                    .setPositiveButton("OK", null)
-                    .show()
-            );
-             }
-            }).start();
-           }
-          EOF
+                    );
+                  });
+                } 
+               }).start();
+              }
+             EOF
 
       - uses: gradle/actions/setup-gradle@v4
         with:
