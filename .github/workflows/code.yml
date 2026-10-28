@@ -1790,9 +1790,6 @@ jobs:
 
           return e;
            }
-
-           return new JSONArray(response);
-           }
            
             void loadAvailableLots(LinearLayout container) {
             container.removeAllViews();
@@ -1885,7 +1882,8 @@ jobs:
              }
            }).start();
            }
-
+           
+           void createOrder(String lotId, String collectorId) {
           if (collectorId == null || collectorId.isEmpty()) {
           toast("Collector information is missing for this lot.");
           return;
@@ -1925,8 +1923,6 @@ jobs:
             );
              }
             }).start();
-             }
-
            }
           EOF
 
