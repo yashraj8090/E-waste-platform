@@ -1400,6 +1400,50 @@ jobs:
 
                   heading(tr("Safety tips", "सुरक्षा सुझाव",
                       "सुरक्षा सूचना"));
+
+                      
+                 gap(8);
+
+                 Button logoutButton = secondaryButton(
+                 tr("Log Out", "लॉग आउट", "लॉग आउट")
+                 );
+                 body.addView(logoutButton, lp(-1, 48));
+
+                 logoutButton.setOnClickListener(v ->
+                 new AlertDialog.Builder(this)
+                .setTitle("Log Out")
+                .setMessage("Do you want to log out?")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Log Out", (dialog, which) -> {
+                userId = "";
+                accessToken = "";
+                refreshToken = "";
+                tokenExpiresAt = 0;
+                currentRole = "";
+                email = "";
+                displayName = "";
+                recyclerAuthorized = false;
+
+                 pref.edit()
+                .remove("user_id")
+                .remove("access_token")
+                .remove("refresh_token")
+                .remove("token_expires_at")
+                .remove("current_role")
+                .remove("email")
+                .remove("display_name")
+                .remove("recycler_authorized")
+                .apply();
+
+            roleChoice = "collector";
+            screen = "role";
+            tab = 0;
+            render();
+            })
+           .show()
+            );
+
+                      
                   body.addView(t(tr(
                       "• Do not cut or burn batteries.\n" +
                       "• Keep e-waste separated.\n" +
